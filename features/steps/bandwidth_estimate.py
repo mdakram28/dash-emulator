@@ -3,7 +3,7 @@ from types import SimpleNamespace
 
 from behave import *
 
-from dash_emulator.bandwidth import BandwidthMeterImpl, BandwidthUpdateListener
+from dash_emulator_quic.bandwidth import BandwidthMeterImpl, BandwidthUpdateListener
 
 use_step_matcher("re")
 

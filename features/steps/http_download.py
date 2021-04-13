@@ -3,7 +3,7 @@ from types import SimpleNamespace
 
 from behave import *
 
-from dash_emulator.download import DownloadManagerImpl, DownloadEventListener
+from dash_emulator_quic.download import DownloadManagerImpl, DownloadEventListener
 
 use_step_matcher("re")
 

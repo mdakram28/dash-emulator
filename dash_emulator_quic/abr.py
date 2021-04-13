@@ -1,9 +1,9 @@
 from abc import ABC, abstractmethod
 from typing import Dict, Optional
 
-from dash_emulator.bandwidth import BandwidthMeter
-from dash_emulator.buffer import BufferManager
-from dash_emulator.models import AdaptationSet
+from dash_emulator_quic.bandwidth import BandwidthMeter
+from dash_emulator_quic.buffer import BufferManager
+from dash_emulator_quic.models import AdaptationSet
 
 
 class ABRController(ABC):

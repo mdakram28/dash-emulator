@@ -3,9 +3,9 @@ from abc import ABC, abstractmethod
 from asyncio import Task
 from typing import Optional
 
-from dash_emulator.download import DownloadManager
-from dash_emulator.models import MPD
-from dash_emulator.mpd.parser import MPDParser
+from dash_emulator_quic.download import DownloadManager
+from dash_emulator_quic.models import MPD
+from dash_emulator_quic.mpd.parser import MPDParser
 
 
 class MPDProvider(ABC):

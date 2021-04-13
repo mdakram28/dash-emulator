@@ -1,4 +1,4 @@
-from dash_emulator.scheduler import SchedulerEventHandler
+from dash_emulator_quic.scheduler import SchedulerEventHandler
 
 
 class EventLogger(SchedulerEventHandler):

@@ -3,17 +3,17 @@ import time
 from abc import ABC, abstractmethod
 from typing import Optional
 
-from dash_emulator.abr import DashABRController
-from dash_emulator.bandwidth import BandwidthMeterImpl
-from dash_emulator.buffer import BufferManager, BufferManagerImpl
-from dash_emulator.config import Config
-from dash_emulator.download import DownloadManagerImpl
-from dash_emulator.event_logger import EventLogger
-from dash_emulator.models import State, MPD
-from dash_emulator.mpd import MPDProvider
-from dash_emulator.mpd.parser import DefaultMPDParser
-from dash_emulator.mpd.providers import MPDProviderImpl
-from dash_emulator.scheduler import Scheduler, SchedulerImpl
+from dash_emulator_quic.abr import DashABRController
+from dash_emulator_quic.bandwidth import BandwidthMeterImpl
+from dash_emulator_quic.buffer import BufferManager, BufferManagerImpl
+from dash_emulator_quic.config import Config
+from dash_emulator_quic.download import DownloadManagerImpl
+from dash_emulator_quic.event_logger import EventLogger
+from dash_emulator_quic.models import State, MPD
+from dash_emulator_quic.mpd import MPDProvider
+from dash_emulator_quic.mpd.parser import DefaultMPDParser
+from dash_emulator_quic.mpd.providers import MPDProviderImpl
+from dash_emulator_quic.scheduler import Scheduler, SchedulerImpl
 
 
 class Player(ABC):

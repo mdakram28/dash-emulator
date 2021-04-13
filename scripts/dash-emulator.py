@@ -8,7 +8,7 @@ import re
 import sys
 from typing import Dict, Union
 
-from dash_emulator.player import build_dash_player
+from dash_emulator_quic.player import build_dash_player
 
 log = logging.getLogger(__name__)
 

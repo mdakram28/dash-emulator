@@ -2,7 +2,7 @@ import time
 from abc import ABC, abstractmethod
 from typing import List
 
-from dash_emulator.download import DownloadEventListener
+from dash_emulator_quic.download import DownloadEventListener
 
 
 class BandwidthUpdateListener(ABC):

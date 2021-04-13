@@ -3,11 +3,11 @@ from abc import abstractmethod, ABC
 from asyncio import Task
 from typing import Optional, Dict, Set, List
 
-from dash_emulator.abr import ABRController
-from dash_emulator.bandwidth import BandwidthMeter
-from dash_emulator.buffer import BufferManager
-from dash_emulator.download import DownloadManager
-from dash_emulator.models import AdaptationSet
+from dash_emulator_quic.abr import ABRController
+from dash_emulator_quic.bandwidth import BandwidthMeter
+from dash_emulator_quic.buffer import BufferManager
+from dash_emulator_quic.download import DownloadManager
+from dash_emulator_quic.models import AdaptationSet
 
 
 class SchedulerEventHandler(ABC):
