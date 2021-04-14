@@ -1,7 +1,7 @@
 import asyncio
 import logging
 from collections import deque
-from typing import Callable, Deque, Dict, Optional, Union, cast, Generator
+from typing import Callable, Deque, Dict, Optional, Union, cast, AsyncIterator
 from urllib.parse import urlparse
 
 import aioquic
@@ -120,7 +120,7 @@ class HttpClient(QuicConnectionProtocol):
         else:
             self._http = H3Connection(self._quic)
 
-    async def get(self, url: str, headers=None) -> Generator[H3Event, None, None]:
+    async def get(self, url: str, headers=None) -> AsyncIterator[H3Event]:
         """
         Perform a GET request.
         """
@@ -196,7 +196,7 @@ class HttpClient(QuicConnectionProtocol):
             for http_event in self._http.handle_event(event):
                 self.http_event_received(http_event)
 
-    async def _request(self, request: HttpRequest) -> Generator[H3Event, None, None]:
+    async def _request(self, request: HttpRequest) -> AsyncIterator[H3Event]:
         stream_id = self._quic.get_next_available_stream_id()
         self._http.send_headers(
             stream_id=stream_id,
