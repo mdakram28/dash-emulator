@@ -8,6 +8,8 @@ import re
 import sys
 from typing import Dict, Union
 
+import uvloop
+
 from dash_emulator_quic.player import build_dash_player
 
 log = logging.getLogger(__name__)
@@ -72,4 +74,5 @@ if __name__ == '__main__':
 
     player = build_dash_player()
 
+    uvloop.install()
     asyncio.run(player.start(args["target"]))
