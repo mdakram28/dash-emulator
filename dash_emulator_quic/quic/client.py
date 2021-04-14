@@ -1,6 +1,5 @@
 import asyncio
 import logging
-import time
 from collections import deque
 from typing import Callable, Deque, Dict, Optional, Union, cast
 from urllib.parse import urlparse
@@ -21,6 +20,8 @@ from aioquic.h3.events import (
 from aioquic.quic.configuration import QuicConfiguration
 from aioquic.quic.events import QuicEvent
 from aioquic.tls import SessionTicket
+
+from dash_emulator_quic.download import DownloadManager
 
 logger = logging.getLogger("client")
 
@@ -225,58 +226,22 @@ class HttpClient(QuicConnectionProtocol):
         return await asyncio.shield(waiter)
 
 
-class QuicClient():
+class QuicClientImpl(DownloadManager):
+    @property
+    def is_busy(self):
+        # TODO
+        return False
+
+    async def close(self):
+        # TODO
+        pass
+
+    async def stop(self):
+        # TODO
+        pass
+
     def __init__(self):
         self.quic_configuration = QuicConfiguration(alpn_protocols=H3_ALPN, is_client=True)
-
-    @staticmethod
-    async def perform_http_request(
-            client: HttpClient,
-            url: str,
-            data: str
-    ) -> None:
-        # perform request
-        start = time.time()
-        if data is not None:
-            http_events = await client.post(
-                url,
-                data=data.encode(),
-                headers={"content-type": "application/x-www-form-urlencoded"},
-            )
-            method = "POST"
-        else:
-            http_events = await client.get(url)
-            method = "GET"
-        elapsed = time.time() - start
-
-        # print speed
-        octets = 0
-        for http_event in http_events:
-            if isinstance(http_event, DataReceived):
-                print(len(http_event.data))
-                octets += len(http_event.data)
-        print(
-            "Response received for %s %s : %d bytes in %.1f s (%.3f Mbps)"
-            % (method, urlparse(url).path, octets, elapsed, octets * 8 / elapsed / 1000000)
-        )
-
-    @staticmethod
-    def process_http_pushes(client: HttpClient) -> None:
-        for _, http_events in client.pushes.items():
-            method = ""
-            octets = 0
-            path = ""
-            for http_event in http_events:
-                if isinstance(http_event, DataReceived):
-                    octets += len(http_event.data)
-                elif isinstance(http_event, PushPromiseReceived):
-                    for header, value in http_event.headers:
-                        if header == b":method":
-                            method = value.decode()
-                        elif header == b":path":
-                            path = value.decode()
-            logger.info("Push received for %s %s : %s bytes", method, path, octets)
-            print("Push received for %s %s : %s bytes", method, path, octets)
 
     def save_session_ticket(self, ticket: SessionTicket) -> None:
         """
@@ -286,11 +251,7 @@ class QuicClient():
         print("New session ticket received")
         self.quic_configuration.session_ticket = ticket
 
-    async def run(
-            self,
-            url: str,
-            data: Optional[str],
-    ) -> None:
+    async def download(self, url: str, save=False) -> Optional[bytes]:
         # parse URL
         parsed = urlparse(url)
         host = parsed.hostname
@@ -309,12 +270,15 @@ class QuicClient():
                 wait_connected=False,
         ) as client:
             client = cast(HttpClient, client)
+            data = bytearray()
             # perform request
-            await self.perform_http_request(
-                client=client,
-                url=url,
-                data=data
-            )
+            events = await client.get(url)
+            for event in events:
+                if isinstance(event, HeadersReceived):
+                    print("Header received")
+                else:
+                    event = cast(DataReceived, event)
+                    data.extend(event.data)
+                    print(len(event.data))
 
-            # process http pushes
-            self.process_http_pushes(client=client)
+        return bytes(data) if save else None
