@@ -2,10 +2,10 @@ import logging
 
 from dash_emulator_quic.models import State
 from dash_emulator_quic.player import PlayerEventListener
-from dash_emulator_quic.scheduler import SchedulerEventHandler
+from dash_emulator_quic.scheduler import SchedulerEventListener
 
 
-class EventLogger(SchedulerEventHandler, PlayerEventListener):
+class EventLogger(SchedulerEventListener, PlayerEventListener):
     log = logging.getLogger("EventLogger")
 
     async def on_state_change(self, position: float, old_state: State, new_state: State):
