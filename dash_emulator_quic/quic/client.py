@@ -270,11 +270,9 @@ class QuicClientImpl(DownloadManager):
         is received.
         """
         self.log.info("New session ticket received from server: " + ticket.server_name)
-        print("New session ticket received from server: " + ticket.server_name)
         self.quic_configuration.session_ticket = ticket
 
     async def download(self, url: str, save=False) -> Optional[bytes]:
-        print("New task")
         # parse URL
         parsed = urlparse(url)
         host = parsed.hostname
@@ -283,7 +281,6 @@ class QuicClientImpl(DownloadManager):
         else:
             port = 443
 
-        print(host)
         async with connect(
                 host,
                 port,
@@ -304,7 +301,7 @@ class QuicClientImpl(DownloadManager):
             async for event in client.get(url):
                 if isinstance(event, HeadersReceived):
                     # TODO: Parse header
-                    print("Header received")
+                    self.log.info("Header received")
                 else:
                     event = cast(DataReceived, event)
                     data.extend(event.data)

@@ -1,20 +1,18 @@
 import asyncio
 import time
 from abc import ABC, abstractmethod
-from typing import Optional
+from typing import Optional, List
 
-from dash_emulator_quic.abr import DashABRController
-from dash_emulator_quic.bandwidth import BandwidthMeterImpl
-from dash_emulator_quic.buffer import BufferManager, BufferManagerImpl
-from dash_emulator_quic.config import Config
-from dash_emulator_quic.download import DownloadManagerImpl
-from dash_emulator_quic.event_logger import EventLogger
+from dash_emulator_quic.buffer import BufferManager
 from dash_emulator_quic.models import State, MPD
 from dash_emulator_quic.mpd import MPDProvider
-from dash_emulator_quic.mpd.parser import DefaultMPDParser
-from dash_emulator_quic.mpd.providers import MPDProviderImpl
-from dash_emulator_quic.quic.client import QuicClientImpl
-from dash_emulator_quic.scheduler import Scheduler, SchedulerImpl
+from dash_emulator_quic.scheduler import Scheduler
+
+
+class PlayerEventListener(ABC):
+    @abstractmethod
+    async def on_state_change(self, position: float, old_state: State, new_state: State):
+        pass
 
 
 class Player(ABC):
@@ -65,7 +63,8 @@ class DASHPlayer(Player):
                  min_start_buffer_duration: float,
                  buffer_manager: BufferManager,
                  mpd_provider: MPDProvider,
-                 scheduler: Scheduler):
+                 scheduler: Scheduler,
+                 listeners: List[PlayerEventListener]):
         """
         Parameters
         ----------
@@ -82,6 +81,8 @@ class DASHPlayer(Player):
             The scheduler which controls the segment downloads
         buffer_manager
             The buffer manager
+        listeners:
+            A list of player event listeners
         """
         self.update_interval = update_interval
 
@@ -91,6 +92,7 @@ class DASHPlayer(Player):
         self.buffer_manager = buffer_manager
         self.scheduler = scheduler
         self.mpd_provider = mpd_provider
+        self.listeners = listeners
 
         # MPD related
         self._mpd_obj: Optional[MPD] = None
@@ -108,6 +110,10 @@ class DASHPlayer(Player):
     @property
     def state(self) -> State:
         return self._state
+
+    async def _switch_state(self, old_state: State, new_state: State):
+        for listener in self.listeners:
+            await listener.on_state_change(self._position, old_state, new_state)
 
     async def start(self, mpd_url) -> None:
         # If the player doesn't have an MPD object, the player waits for it
@@ -155,45 +161,21 @@ class DASHPlayer(Player):
             if self._state == State.READY:
                 if buffer_level <= 0:
                     if self.scheduler.is_end:
+                        await self._switch_state(self._state, State.END)
                         self._state = State.END
                         return
                     else:
+                        await self._switch_state(self._state, State.BUFFERING)
                         self._state = State.BUFFERING
             elif self._state == State.BUFFERING:
                 if not self._playback_started:
                     if buffer_level > self.min_start_buffer_duration:
                         self._playback_started = True
+                        await self._switch_state(self._state, State.READY)
                         self._state = State.READY
                 else:
                     if buffer_level > self.min_rebuffer_duration:
+                        await self._switch_state(self._state, State.READY)
                         self._state = State.READY
 
             await asyncio.sleep(min(buffer_level, self.update_interval) if buffer_level > 0 else self.update_interval)
-
-
-def build_dash_player() -> Player:
-    cfg = Config
-    buffer_manager = BufferManagerImpl()
-    event_logger = EventLogger()
-    mpd_provider = MPDProviderImpl(DefaultMPDParser(), cfg.update_interval, DownloadManagerImpl([]))
-    bandwidth_meter = BandwidthMeterImpl(cfg.max_initial_bitrate, cfg.smoothing_factor, [])
-    download_manager = DownloadManagerImpl([bandwidth_meter])
-    abr_controller = DashABRController(2, 4, bandwidth_meter, buffer_manager)
-    scheduler = SchedulerImpl(5, cfg.update_interval, download_manager, bandwidth_meter, buffer_manager,
-                              abr_controller, [event_logger])
-    return DASHPlayer(cfg.update_interval, min_rebuffer_duration=1, min_start_buffer_duration=2,
-                      buffer_manager=buffer_manager, mpd_provider=mpd_provider, scheduler=scheduler)
-
-
-def build_dash_player_over_quic() -> Player:
-    cfg = Config
-    buffer_manager = BufferManagerImpl()
-    event_logger = EventLogger()
-    mpd_provider = MPDProviderImpl(DefaultMPDParser(), cfg.update_interval, QuicClientImpl([]))
-    bandwidth_meter = BandwidthMeterImpl(cfg.max_initial_bitrate, cfg.smoothing_factor, [])
-    download_manager = QuicClientImpl([bandwidth_meter])
-    abr_controller = DashABRController(2, 4, bandwidth_meter, buffer_manager)
-    scheduler = SchedulerImpl(5, cfg.update_interval, download_manager, bandwidth_meter, buffer_manager,
-                              abr_controller, [event_logger])
-    return DASHPlayer(cfg.update_interval, min_rebuffer_duration=1, min_start_buffer_duration=2,
-                      buffer_manager=buffer_manager, mpd_provider=mpd_provider, scheduler=scheduler)

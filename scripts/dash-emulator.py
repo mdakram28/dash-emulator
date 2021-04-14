@@ -10,7 +10,7 @@ from typing import Dict, Union
 
 import uvloop
 
-from dash_emulator_quic.player import build_dash_player_over_quic, build_dash_player
+from dash_emulator_quic.player_factory import build_dash_player_over_quic, build_dash_player
 
 log = logging.getLogger(__name__)
 
@@ -61,6 +61,7 @@ if __name__ == '__main__':
     except AssertionError:
         print("Python 3.3+ is required.")
         exit(-1)
+    logging.basicConfig(level=logging.INFO)
     parser = create_parser()
     args = parser.parse_args()
 
@@ -74,6 +75,7 @@ if __name__ == '__main__':
 
     player = build_dash_player_over_quic()
     # player = build_dash_player()
+
 
     uvloop.install()
     asyncio.run(player.start(args["target"]))
