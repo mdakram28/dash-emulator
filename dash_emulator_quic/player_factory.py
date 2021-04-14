@@ -12,6 +12,13 @@ from dash_emulator_quic.scheduler import SchedulerImpl
 
 
 def build_dash_player() -> Player:
+    """
+    Build a default DASH Player
+    Returns
+    -------
+    player: Player
+        A built MPEG-DASH player
+    """
     cfg = Config
     buffer_manager = BufferManagerImpl()
     event_logger = EventLogger()
@@ -27,6 +34,13 @@ def build_dash_player() -> Player:
 
 
 def build_dash_player_over_quic() -> Player:
+    """
+    Build a DASH player using HTTP3 over QUIC
+    Returns
+    -------
+    player: Player
+        A built MPEG-DASH player using HTTP3 over QUIC
+    """
     cfg = Config
     buffer_manager = BufferManagerImpl()
     event_logger = EventLogger()
