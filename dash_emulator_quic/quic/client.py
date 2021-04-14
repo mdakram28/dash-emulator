@@ -1,7 +1,7 @@
 import asyncio
 import logging
 from collections import deque
-from typing import Callable, Deque, Dict, Optional, Union, cast
+from typing import Callable, Deque, Dict, Optional, Union, cast, Generator
 from urllib.parse import urlparse
 
 import aioquic
@@ -112,8 +112,7 @@ class HttpClient(QuicConnectionProtocol):
 
         self.pushes: Dict[int, Deque[H3Event]] = {}
         self._http: Optional[HttpConnection] = None
-        self._request_events: Dict[int, Deque[H3Event]] = {}
-        self._request_waiter: Dict[int, asyncio.Future[Deque[H3Event]]] = {}
+        self._request_events: Dict[int, asyncio.Queue[H3Event]] = {}
         self._websockets: Dict[int, WebSocket] = {}
 
         if self._quic.configuration.alpn_protocols[0].startswith("hq-"):
@@ -121,15 +120,14 @@ class HttpClient(QuicConnectionProtocol):
         else:
             self._http = H3Connection(self._quic)
 
-    async def get(self, url: str, headers=None) -> Deque[H3Event]:
+    async def get(self, url: str, headers=None) -> Generator[H3Event, None, None]:
         """
         Perform a GET request.
         """
         if headers is None:
             headers = {}
-        return await self._request(
-            HttpRequest(method="GET", url=URL(url), headers=headers)
-        )
+        async for event in self._request(HttpRequest(method="GET", url=URL(url), headers=headers)):
+            yield event
 
     async def post(self, url: str, data: bytes, headers=None) -> Deque[H3Event]:
         """
@@ -137,9 +135,8 @@ class HttpClient(QuicConnectionProtocol):
         """
         if headers is None:
             headers = {}
-        return await self._request(
-            HttpRequest(method="POST", url=URL(url), content=data, headers=headers)
-        )
+        async for event in self._request(HttpRequest(method="POST", url=URL(url), content=data, headers=headers)):
+            yield event
 
     async def websocket(self, url: str, subprotocols=None) -> WebSocket:
         """
@@ -179,11 +176,7 @@ class HttpClient(QuicConnectionProtocol):
             stream_id = event.stream_id
             if stream_id in self._request_events:
                 # http
-                self._request_events[event.stream_id].append(event)
-                if event.stream_ended:
-                    request_waiter = self._request_waiter.pop(stream_id)
-                    request_waiter.set_result(self._request_events.pop(stream_id))
-
+                asyncio.ensure_future(self._request_events[event.stream_id].put(event))
             elif stream_id in self._websockets:
                 # websocket
                 websocket = self._websockets[stream_id]
@@ -203,7 +196,7 @@ class HttpClient(QuicConnectionProtocol):
             for http_event in self._http.handle_event(event):
                 self.http_event_received(http_event)
 
-    async def _request(self, request: HttpRequest) -> Deque[H3Event]:
+    async def _request(self, request: HttpRequest) -> Generator[H3Event, None, None]:
         stream_id = self._quic.get_next_available_stream_id()
         self._http.send_headers(
             stream_id=stream_id,
@@ -213,17 +206,20 @@ class HttpClient(QuicConnectionProtocol):
                         (b":authority", request.url.authority.encode()),
                         (b":path", request.url.full_path.encode()),
                         (b"user-agent", USER_AGENT.encode()),
-                    ]
-                    + [(k.encode(), v.encode()) for (k, v) in request.headers.items()],
+                    ] + [(k.encode(), v.encode()) for (k, v) in request.headers.items()],
         )
         self._http.send_data(stream_id=stream_id, data=request.content, end_stream=True)
 
-        waiter = self._loop.create_future()
-        self._request_events[stream_id] = deque()
-        self._request_waiter[stream_id] = waiter
+        queue = asyncio.Queue()
+        self._request_events[stream_id] = queue
         self.transmit()
 
-        return await asyncio.shield(waiter)
+        while True:
+            event = await queue.get()
+            if isinstance(event, DataReceived):
+                if event.stream_ended:
+                    return
+            yield event
 
 
 class QuicClientImpl(DownloadManager):
@@ -272,8 +268,7 @@ class QuicClientImpl(DownloadManager):
             client = cast(HttpClient, client)
             data = bytearray()
             # perform request
-            events = await client.get(url)
-            for event in events:
+            async for event in client.get(url):
                 if isinstance(event, HeadersReceived):
                     print("Header received")
                 else:
