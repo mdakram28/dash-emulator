@@ -54,9 +54,12 @@ class DashABRController(ABRController):
     @staticmethod
     def choose_ideal_selection(adaptation_set, bw) -> int:
         representations = sorted(adaptation_set.representations.values(), key=lambda x: x.bandwidth, reverse=True)
+        last_id = -1
         for representation in representations:
+            last_id = representation.id
             if representation.bandwidth < bw:
                 return representation.id
+        return last_id
 
     def update_selection(self, adaptation_sets: Dict[int, AdaptationSet]) -> Dict[int, int]:
         # Only use 70% of measured bandwidth

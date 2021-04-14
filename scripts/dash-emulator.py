@@ -10,7 +10,7 @@ from typing import Dict, Union
 
 import uvloop
 
-from dash_emulator_quic.player import build_dash_player
+from dash_emulator_quic.player import build_dash_player_over_quic, build_dash_player
 
 log = logging.getLogger(__name__)
 
@@ -72,7 +72,8 @@ if __name__ == '__main__':
         log.error("Arguments validation error, exit.")
         exit(-1)
 
-    player = build_dash_player()
+    player = build_dash_player_over_quic()
+    # player = build_dash_player()
 
     uvloop.install()
     asyncio.run(player.start(args["target"]))

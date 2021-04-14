@@ -1,7 +1,7 @@
 import asyncio
 import logging
 from collections import deque
-from typing import Callable, Deque, Dict, Optional, Union, cast, AsyncIterator
+from typing import Callable, Deque, Dict, Optional, Union, cast, AsyncIterator, List
 from urllib.parse import urlparse
 
 import aioquic
@@ -21,7 +21,7 @@ from aioquic.quic.configuration import QuicConfiguration
 from aioquic.quic.events import QuicEvent
 from aioquic.tls import SessionTicket
 
-from dash_emulator_quic.download import DownloadManager
+from dash_emulator_quic.download import DownloadManager, DownloadEventListener
 
 logger = logging.getLogger("client")
 
@@ -223,31 +223,58 @@ class HttpClient(QuicConnectionProtocol):
 
 
 class QuicClientImpl(DownloadManager):
+    log = logging.getLogger("QuicClientImpl")
+
+    def __init__(self, event_listeners: List[DownloadEventListener], write_to_disk=False,
+                 session_ticket: Optional[SessionTicket] = None):
+        """
+        Parameters
+        ----------
+        event_listeners: List[DownloadEventListener]
+            A list of event listeners
+        write_to_disk: bool
+            If the file should be written to disks
+        session_ticket : Optional[SessionTicket]
+            The ticket containing the authentication information.
+            With this ticket, The QUIC Client can have 0-RTT on the first request (if the server allows).
+            The QUIC Client will use 0-RTT for the following requests no matter if this parameter is provided.
+        """
+        self.quic_configuration = QuicConfiguration(alpn_protocols=H3_ALPN, is_client=True)
+        if session_ticket is not None:
+            self.quic_configuration.session_ticket = session_ticket
+        self.event_listeners = event_listeners
+        self.write_to_disk = write_to_disk
+
+        self._busy = False
+        self._stop = False
+        self._client: Optional[HttpClient] = None
+
     @property
     def is_busy(self):
-        # TODO
-        return False
+        return self._busy
+
+    def _close(self):
+        # TODO: Close a stream, not the connection
+        if self._client is not None:
+            self._client.close()
 
     async def close(self):
-        # TODO
-        pass
+        self._close()
 
     async def stop(self):
-        # TODO
-        pass
-
-    def __init__(self):
-        self.quic_configuration = QuicConfiguration(alpn_protocols=H3_ALPN, is_client=True)
+        self._close()
 
     def save_session_ticket(self, ticket: SessionTicket) -> None:
         """
         Callback which is invoked by the TLS engine when a new session ticket
         is received.
         """
-        print("New session ticket received")
+        self.log.info("New session ticket received from server: " + ticket.server_name)
+        print("New session ticket received from server: " + ticket.server_name)
         self.quic_configuration.session_ticket = ticket
 
     async def download(self, url: str, save=False) -> Optional[bytes]:
+        print("New task")
         # parse URL
         parsed = urlparse(url)
         host = parsed.hostname
@@ -256,6 +283,7 @@ class QuicClientImpl(DownloadManager):
         else:
             port = 443
 
+        print(host)
         async with connect(
                 host,
                 port,
@@ -265,15 +293,23 @@ class QuicClientImpl(DownloadManager):
                 local_port=0,
                 wait_connected=False,
         ) as client:
+
+            for listener in self.event_listeners:
+                await listener.on_transfer_start(url)
+
             client = cast(HttpClient, client)
+            self._client = client
             data = bytearray()
             # perform request
             async for event in client.get(url):
                 if isinstance(event, HeadersReceived):
+                    # TODO: Parse header
                     print("Header received")
                 else:
                     event = cast(DataReceived, event)
                     data.extend(event.data)
-                    print(len(event.data))
-
+                    for listener in self.event_listeners:
+                        await listener.on_bytes_transferred(len(event.data), url, len(data), len(event.data))
+        for listener in self.event_listeners:
+            await listener.on_transfer_end(len(data), url)
         return bytes(data) if save else None
