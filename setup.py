@@ -8,7 +8,8 @@ requirements = [
     "aiohttp",
     "requests",
     "matplotlib",
-    "behave"
+    "behave",
+    "aioquic"
 ]
 
 setup(name='dash-emulator-quic',

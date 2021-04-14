@@ -6,4 +6,4 @@ class EventLogger(SchedulerEventHandler):
         print("Download start. Index: %d, Selections: %s" % (index, str(selections)))
 
     def on_segment_download_complete(self, index):
-        print("Download complete. Index: %d" % (index))
+        print("Download complete. Index: %d" % index)

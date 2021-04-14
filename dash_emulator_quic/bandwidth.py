@@ -71,6 +71,14 @@ class BandwidthMeterImpl(BandwidthMeter, DownloadEventListener):
         for listener in self.listeners:
             await listener.on_bandwidth_update(self._bw)
 
+    async def on_transfer_canceled(self, downloaded_bytes, total_bytes):
+        self.transmission_end_time = time.time()
+        self.update_bandwidth()
+        self.bytes_transferred = 0
+
+        for listener in self.listeners:
+            await listener.on_bandwidth_update(self._bw)
+
     @property
     def bandwidth(self) -> int:
         return self._bw

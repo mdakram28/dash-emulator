@@ -42,6 +42,11 @@ class DownloadEventListener(ABC):
         url: str
             The url of the transmission
         """
+        pass
+
+    @abstractmethod
+    async def on_transfer_canceled(self, downloaded_bytes, total_bytes):
+        pass
 
 
 class DownloadManager(ABC):
@@ -74,6 +79,7 @@ class DownloadManager(ABC):
         """
         pass
 
+    @abstractmethod
     async def stop(self):
         """
         Stop current request
@@ -106,6 +112,7 @@ class DownloadManagerImpl(DownloadManager):
         self.chunk_size = chunk_size
 
         self._busy = False
+        self._stop = False
         self._session: Optional[aiohttp.ClientSession] = None
 
     @property
@@ -126,6 +133,11 @@ class DownloadManagerImpl(DownloadManager):
             for listener in self.event_listeners:
                 await listener.on_transfer_start(url)
             while True:
+                if self._stop:
+                    self._stop = False
+                    for listener in self.event_listeners:
+                        await listener.on_transfer_end(resp.content_length, url)
+                    break
                 chunk = await resp.content.read(self.chunk_size)
                 if not chunk:
                     # Download complete, call listeners
@@ -147,3 +159,6 @@ class DownloadManagerImpl(DownloadManager):
         """
         if self._session is not None:
             await self._session.close()
+
+    async def stop(self):
+        self._stop = True
