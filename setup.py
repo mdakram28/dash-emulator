@@ -11,7 +11,8 @@ requirements = [
     "requests",
     "matplotlib",
     "behave",
-    "aioquic"
+    "aioquic",
+    "dash-emulator @ git+https://github.com/yang-jace-liu/dash-emulator#egg=dash-emulator"
 ]
 
 setup(name='dash-emulator-quic',

@@ -9,8 +9,9 @@ import sys
 from typing import Dict, Union
 
 import uvloop
+from dash_emulator.player_factory import build_dash_player
 
-from dash_emulator_quic.player_factory import build_dash_player_over_quic, build_dash_player
+from dash_emulator_quic.player_factory import build_dash_player_over_quic
 
 log = logging.getLogger(__name__)
 

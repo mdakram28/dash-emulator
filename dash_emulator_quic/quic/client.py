@@ -21,7 +21,7 @@ from aioquic.quic.configuration import QuicConfiguration
 from aioquic.quic.events import QuicEvent
 from aioquic.tls import SessionTicket
 
-from dash_emulator_quic.download import DownloadManager, DownloadEventListener
+from dash_emulator.download import DownloadManager, DownloadEventListener
 
 logger = logging.getLogger("client")
 
