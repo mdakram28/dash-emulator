@@ -25,7 +25,7 @@ class QuicClientImpl(DownloadManager):
             A list of event listeners
         write_to_disk: bool
             If the file should be written to disks
-        session_ticket : Optional[SessionTicket]
+        session_ticket : SessionTicket, optional
             The ticket containing the authentication information.
             With this ticket, The QUIC Client can have 0-RTT on the first request (if the server allows).
             The QUIC Client will use 0-RTT for the following requests no matter if this parameter is provided.
@@ -65,7 +65,22 @@ class QuicClientImpl(DownloadManager):
         self.log.info("New session ticket received from server: " + ticket.server_name)
         self.quic_configuration.session_ticket = ticket
 
-    async def start(self, host, port):
+    async def start(self, host, port, event=None):
+        """
+        Start the QUIC Client
+
+        Parameters
+        ----------
+        host: str
+            The hostname of the remote endpoint
+        port: int
+            The UDP port to connect to the remote endpoint
+        event: asyncio.Event, optional
+            If event is not None, set the event when the client is up
+        Returns
+        -------
+
+        """
         async with connect(
                 host,
                 port,
@@ -76,6 +91,8 @@ class QuicClientImpl(DownloadManager):
                 wait_connected=False,
         ) as client:
             self._client = client
+            if event is not None:
+                event.set()
             while True:
                 await asyncio.sleep(10)
 
@@ -96,10 +113,10 @@ class QuicClientImpl(DownloadManager):
                 port = parsed.port
             else:
                 port = 443
-            asyncio.create_task(self.start(host, port))
+            event = asyncio.Event()
+            asyncio.create_task(self.start(host, port, event=event))
 
-        while self._client is None:
-            await asyncio.sleep(0.5)
+            await event.wait()
 
         for listener in self.event_listeners:
             await listener.on_transfer_start(url)
