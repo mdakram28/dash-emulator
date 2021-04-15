@@ -16,15 +16,12 @@ from dash_emulator_quic.quic.protocol import HttpProtocol
 class QuicClientImpl(DownloadManager):
     log = logging.getLogger("QuicClientImpl")
 
-    def __init__(self, event_listeners: List[DownloadEventListener], write_to_disk=False,
-                 session_ticket: Optional[SessionTicket] = None):
+    def __init__(self, event_listeners: List[DownloadEventListener], session_ticket: Optional[SessionTicket] = None):
         """
         Parameters
         ----------
         event_listeners: List[DownloadEventListener]
             A list of event listeners
-        write_to_disk: bool
-            If the file should be written to disks
         session_ticket : SessionTicket, optional
             The ticket containing the authentication information.
             With this ticket, The QUIC Client can have 0-RTT on the first request (if the server allows).
@@ -34,9 +31,9 @@ class QuicClientImpl(DownloadManager):
         if session_ticket is not None:
             self.quic_configuration.session_ticket = session_ticket
         self.event_listeners = event_listeners
-        self.write_to_disk = write_to_disk
 
         self._client: Optional[HttpProtocol] = None
+        self._close_event: Optional[asyncio.Event] = None
 
     @property
     def is_busy(self):
@@ -52,10 +49,12 @@ class QuicClientImpl(DownloadManager):
         return False
 
     async def close(self):
-        pass
+        if self._close_event is not None:
+            self._close_event.set()
 
-    async def stop(self):
-        pass
+    async def stop(self, url: str):
+        if self._client is not None:
+            await self._client.close_stream_of_url(url)
 
     def save_session_ticket(self, ticket: SessionTicket) -> None:
         """
@@ -77,10 +76,10 @@ class QuicClientImpl(DownloadManager):
             The UDP port to connect to the remote endpoint
         event: asyncio.Event, optional
             If event is not None, set the event when the client is up
-        Returns
-        -------
-
         """
+
+        self._close_event = asyncio.Event()
+
         async with connect(
                 host,
                 port,
@@ -93,8 +92,10 @@ class QuicClientImpl(DownloadManager):
             self._client = client
             if event is not None:
                 event.set()
-            while True:
-                await asyncio.sleep(10)
+            await self._close_event.wait()
+
+        self._client = None
+        self._close_event = None
 
     @staticmethod
     def parse_headers(headers: List[Tuple[bytes, bytes]]) -> Dict[str, str]:
@@ -115,7 +116,6 @@ class QuicClientImpl(DownloadManager):
                 port = 443
             event = asyncio.Event()
             asyncio.create_task(self.start(host, port, event=event))
-
             await event.wait()
 
         for listener in self.event_listeners:
@@ -138,7 +138,3 @@ class QuicClientImpl(DownloadManager):
         for listener in self.event_listeners:
             await listener.on_transfer_end(len(data), url)
         return bytes(data) if save else None
-
-    async def close_url(self, url):
-        if self._client is not None:
-            await self._client.close_stream_of_url(url)

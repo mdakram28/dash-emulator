@@ -2,7 +2,6 @@ from dash_emulator.abr import DashABRController
 from dash_emulator.bandwidth import BandwidthMeterImpl
 from dash_emulator.buffer import BufferManager, BufferManagerImpl
 from dash_emulator.config import Config
-from dash_emulator.download import DownloadManagerImpl
 from dash_emulator.event_logger import EventLogger
 from dash_emulator.mpd import MPDProvider
 from dash_emulator.mpd.parser import DefaultMPDParser
