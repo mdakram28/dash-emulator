@@ -43,5 +43,7 @@ def step_impl(context):
     quic_client: QuicClientImpl = context.args.quic_client
     # asyncio.run(quic_client.get(context.args.url))
 
-    asyncio.run(quic_client.download(context.args.url1))
-    asyncio.run(quic_client.download(context.args.url2))
+    async def foo():
+        await quic_client.download(context.args.url1)
+        await quic_client.download(context.args.url2)
+    asyncio.run(foo())

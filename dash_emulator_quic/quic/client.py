@@ -1,3 +1,4 @@
+import asyncio
 import logging
 from typing import List, Optional, cast
 from urllib.parse import urlparse
@@ -43,16 +44,11 @@ class QuicClientImpl(DownloadManager):
     def is_busy(self):
         return self._busy
 
-    def _close(self):
-        # TODO: Close a stream, not the connection
-        if self._client is not None:
-            self._client.close()
-
     async def close(self):
-        self._close()
+        pass
 
     async def stop(self):
-        self._close()
+        pass
 
     def save_session_ticket(self, ticket: SessionTicket) -> None:
         """
@@ -62,15 +58,7 @@ class QuicClientImpl(DownloadManager):
         self.log.info("New session ticket received from server: " + ticket.server_name)
         self.quic_configuration.session_ticket = ticket
 
-    async def download(self, url: str, save=False) -> Optional[bytes]:
-        # parse URL
-        parsed = urlparse(url)
-        host = parsed.hostname
-        if parsed.port is not None:
-            port = parsed.port
-        else:
-            port = 443
-
+    async def start(self, host, port):
         async with connect(
                 host,
                 port,
@@ -80,24 +68,39 @@ class QuicClientImpl(DownloadManager):
                 local_port=0,
                 wait_connected=False,
         ) as client:
-
-            for listener in self.event_listeners:
-                await listener.on_transfer_start(url)
-
-            client = cast(HttpClient, client)
             self._client = client
-            data = bytearray()
-            # perform request
-            async for event in client.get(url):
-                if isinstance(event, HeadersReceived):
-                    # TODO: Parse header
-                    self.log.info("Header received")
-                else:
-                    event = cast(DataReceived, event)
-                    print(len(event.data))
-                    data.extend(event.data)
-                    for listener in self.event_listeners:
-                        await listener.on_bytes_transferred(len(event.data), url, len(data), len(event.data))
+            while True:
+                await asyncio.sleep(10)
+
+    async def download(self, url: str, save=False) -> Optional[bytes]:
+        if self._client is None:
+            # parse URL
+            parsed = urlparse(url)
+            host = parsed.hostname
+            if parsed.port is not None:
+                port = parsed.port
+            else:
+                port = 443
+            asyncio.create_task(self.start(host, port))
+
+        while self._client is None:
+            await asyncio.sleep(0.5)
+
+        for listener in self.event_listeners:
+            await listener.on_transfer_start(url)
+
+        client = cast(HttpClient, self._client)
+        data = bytearray()
+        # perform request
+        async for event in client.get(url):
+            if isinstance(event, HeadersReceived):
+                # TODO: Parse header
+                self.log.info("Header received")
+            else:
+                event = cast(DataReceived, event)
+                data.extend(event.data)
+                for listener in self.event_listeners:
+                    await listener.on_bytes_transferred(len(event.data), url, len(data), len(event.data))
         for listener in self.event_listeners:
             await listener.on_transfer_end(len(data), url)
         return bytes(data) if save else None
