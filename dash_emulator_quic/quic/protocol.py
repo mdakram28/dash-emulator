@@ -25,6 +25,26 @@ HttpConnection = Union[H0Connection, H3Connection]
 USER_AGENT = "aioquic/" + aioquic.__version__
 
 
+def encode_variable_length_integer(num: int) -> bytes:
+    """
+    Encode variable length integer to bytes according to QUIC draft
+    """
+    if num <= 63:
+        return bytes([num])
+    elif num <= 16383:
+        b = num.to_bytes(2, byteorder='big')
+        b[0] |= 0x40
+        return b
+    elif num <= 1073741823:
+        b = num.to_bytes(4, byteorder='big')
+        b[0] |= 0x80
+        return b
+    else:
+        b = num.to_bytes(8, byteorder='big')
+        b[0] |= 0xC0
+        return b
+
+
 class URL:
     def __init__(self, url: str) -> None:
         parsed = urlparse(url)
@@ -34,6 +54,7 @@ class URL:
         if parsed.query:
             self.full_path += "?" + parsed.query
         self.scheme = parsed.scheme
+        self.url = url
 
 
 class HttpRequest:
@@ -101,7 +122,7 @@ class WebSocket:
             self.queue.put_nowait(event.data)
 
 
-class HttpClient(QuicConnectionProtocol):
+class HttpProtocol(QuicConnectionProtocol):
     def __init__(self, *args, **kwargs) -> None:
         super().__init__(*args, **kwargs)
 
@@ -109,6 +130,7 @@ class HttpClient(QuicConnectionProtocol):
         self._http: Optional[HttpConnection] = None
         self._request_events: Dict[int, asyncio.Queue[H3Event]] = {}
         self._websockets: Dict[int, WebSocket] = {}
+        self._url_stream_id: Dict[str, int] = {}
 
         if self._quic.configuration.alpn_protocols[0].startswith("hq-"):
             self._http = H0Connection(self._quic)
@@ -193,6 +215,7 @@ class HttpClient(QuicConnectionProtocol):
 
     async def _request(self, request: HttpRequest) -> AsyncIterator[H3Event]:
         stream_id = self._quic.get_next_available_stream_id()
+        self._url_stream_id[request.url.url] = stream_id
         self._http.send_headers(
             stream_id=stream_id,
             headers=[
@@ -215,3 +238,20 @@ class HttpClient(QuicConnectionProtocol):
                 if event.stream_ended:
                     return
             yield event
+
+    @staticmethod
+    def _encode_stop_sending_frame(stream_id) -> bytes:
+        b = bytearray()
+        b.extend(encode_variable_length_integer(0x05))  # STOP_SENDING
+        b.extend(encode_variable_length_integer(stream_id))
+        b.extend(encode_variable_length_integer(0))
+        return bytes(b)
+
+    async def close_stream(self, stream_id):
+        self._quic.send_datagram_frame(self._encode_stop_sending_frame(stream_id))
+        self.transmit()
+
+    async def close_stream_of_url(self, url):
+        stream_id = self._url_stream_id.get(url, None)
+        assert stream_id is not None
+        await self.close_stream(stream_id)

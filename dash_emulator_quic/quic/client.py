@@ -10,7 +10,7 @@ from aioquic.quic.configuration import QuicConfiguration
 from aioquic.tls import SessionTicket
 from dash_emulator.download import DownloadManager, DownloadEventListener
 
-from dash_emulator_quic.quic.protocol import HttpClient
+from dash_emulator_quic.quic.protocol import HttpProtocol
 
 
 class QuicClientImpl(DownloadManager):
@@ -36,7 +36,7 @@ class QuicClientImpl(DownloadManager):
         self.event_listeners = event_listeners
         self.write_to_disk = write_to_disk
 
-        self._client: Optional[HttpClient] = None
+        self._client: Optional[HttpProtocol] = None
 
     @property
     def is_busy(self):
@@ -70,7 +70,7 @@ class QuicClientImpl(DownloadManager):
                 host,
                 port,
                 configuration=self.quic_configuration,
-                create_protocol=HttpClient,
+                create_protocol=HttpProtocol,
                 session_ticket_handler=self.save_session_ticket,
                 local_port=0,
                 wait_connected=False,
@@ -96,7 +96,7 @@ class QuicClientImpl(DownloadManager):
         for listener in self.event_listeners:
             await listener.on_transfer_start(url)
 
-        client = cast(HttpClient, self._client)
+        client = cast(HttpProtocol, self._client)
         data = bytearray()
         # perform request
         async for event in client.get(url):
@@ -111,3 +111,7 @@ class QuicClientImpl(DownloadManager):
         for listener in self.event_listeners:
             await listener.on_transfer_end(len(data), url)
         return bytes(data) if save else None
+
+    async def close_url(self, url):
+        if self._client is not None:
+            await self._client.close_stream_of_url(url)
