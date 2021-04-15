@@ -29,6 +29,9 @@ class BETAManagerImpl(BETAManager, DownloadEventListener, PlayerEventListener, S
 
     def __init__(self, mpd_provider: MPDProvider, download_manager: DownloadManager):
         """
+        The constructor will create a asyncio.Queue.
+        Be sure to create this instance inside an event loop.
+
         Parameters
         ----------
         mpd_provider
@@ -39,8 +42,7 @@ class BETAManagerImpl(BETAManager, DownloadEventListener, PlayerEventListener, S
         self.mpd_provider = mpd_provider
         self.download_manager = download_manager
 
-        self._queue: Optional[asyncio.Queue[BETAEvent]] = None
-
+        self._queue: asyncio.Queue[BETAEvent] = asyncio.Queue()
         self._bw = 0
 
     async def on_bytes_transferred(self, length: int, url: str, position: int, size: int) -> None:
@@ -62,11 +64,9 @@ class BETAManagerImpl(BETAManager, DownloadEventListener, PlayerEventListener, S
         pass
 
     async def on_bandwidth_update(self, bw: int) -> None:
-        if self._queue is not None:
-            await self._queue.put(BandwidthUpdateEvent(bw))
+        await self._queue.put(BandwidthUpdateEvent(bw))
 
     async def start(self):
-        self._queue = asyncio.Queue()
         while True:
             event = await self._queue.get()
             await self._process(event)

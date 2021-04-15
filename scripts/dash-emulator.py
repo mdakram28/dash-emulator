@@ -74,8 +74,14 @@ if __name__ == '__main__':
         log.error("Arguments validation error, exit.")
         exit(-1)
 
-    player = build_dash_player_over_quic(beta=args["beta"])
-    # player = build_dash_player()
-
     uvloop.install()
-    asyncio.run(player.start(args["target"]))
+
+
+    async def main():
+        player = build_dash_player_over_quic(beta=args["beta"])
+        # player = build_dash_player()
+
+        await player.start(args["target"])
+
+
+    asyncio.run(main())
