@@ -36,13 +36,20 @@ class QuicClientImpl(DownloadManager):
         self.event_listeners = event_listeners
         self.write_to_disk = write_to_disk
 
-        self._busy = False
-        self._stop = False
         self._client: Optional[HttpClient] = None
 
     @property
     def is_busy(self):
-        return self._busy
+        """
+        QUIC supports multiple streams in the same connection.
+        It will be never busy because you can add a new request at any moment.
+
+        Returns
+        -------
+        is_busy: bool
+            False
+        """
+        return False
 
     async def close(self):
         pass
