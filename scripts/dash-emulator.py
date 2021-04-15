@@ -21,6 +21,7 @@ def create_parser():
     arg_parser = argparse.ArgumentParser(description="Accept for the emulator")
     # Add here
 
+    arg_parser.add_argument("--beta", action="store_true", help="Enable BETA")
     arg_parser.add_argument("--proxy", type=str, help='NOT IMPLEMENTED YET')
     arg_parser.add_argument("--output", type=str, required=False, default=None,
                             help="Path to output folder. Indicate this argument to save videos and related data.")
@@ -73,7 +74,7 @@ if __name__ == '__main__':
         log.error("Arguments validation error, exit.")
         exit(-1)
 
-    player = build_dash_player_over_quic()
+    player = build_dash_player_over_quic(beta=args["beta"])
     # player = build_dash_player()
 
     uvloop.install()

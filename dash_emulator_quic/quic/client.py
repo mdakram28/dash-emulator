@@ -138,3 +138,7 @@ class QuicClientImpl(DownloadManager):
         for listener in self.event_listeners:
             await listener.on_transfer_end(len(data), url)
         return bytes(data) if save else None
+
+    def add_listener(self, listener: DownloadEventListener):
+        if listener not in self.event_listeners:
+            self.event_listeners.append(listener)
