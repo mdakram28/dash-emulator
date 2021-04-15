@@ -1,6 +1,6 @@
 import asyncio
 import logging
-from typing import List, Optional, cast
+from typing import List, Optional, cast, Tuple, Dict
 from urllib.parse import urlparse
 
 from aioquic.asyncio import connect
@@ -79,6 +79,14 @@ class QuicClientImpl(DownloadManager):
             while True:
                 await asyncio.sleep(10)
 
+    @staticmethod
+    def parse_headers(headers: List[Tuple[bytes, bytes]]) -> Dict[str, str]:
+        result = dict()
+        for header in headers:
+            key, value = header
+            result[key.decode('utf-8')] = value.decode('utf-8')
+        return result
+
     async def download(self, url: str, save=False) -> Optional[bytes]:
         if self._client is None:
             # parse URL
@@ -98,16 +106,18 @@ class QuicClientImpl(DownloadManager):
 
         client = cast(HttpProtocol, self._client)
         data = bytearray()
+        headers = None
         # perform request
         async for event in client.get(url):
             if isinstance(event, HeadersReceived):
-                # TODO: Parse header
+                headers = self.parse_headers(event.headers)
                 self.log.info("Header received")
             else:
                 event = cast(DataReceived, event)
                 data.extend(event.data)
                 for listener in self.event_listeners:
-                    await listener.on_bytes_transferred(len(event.data), url, len(data), len(event.data))
+                    await listener.on_bytes_transferred(len(event.data), url, len(data),
+                                                        int(headers.get('content-length')))
         for listener in self.event_listeners:
             await listener.on_transfer_end(len(data), url)
         return bytes(data) if save else None
