@@ -1,39 +1,70 @@
 import asyncio
 import logging
-from typing import List, Optional, cast, Tuple, Dict
+from abc import ABC, abstractmethod
+from typing import List, Optional, Tuple, Set, AsyncIterator
 from urllib.parse import urlparse
 
+import aiostream
 from aioquic.asyncio import connect
 from aioquic.h3.connection import H3_ALPN
-from aioquic.h3.events import HeadersReceived, DataReceived
+from aioquic.h3.events import H3Event
 from aioquic.quic.configuration import QuicConfiguration
 from aioquic.tls import SessionTicket
 from dash_emulator.download import DownloadManager, DownloadEventListener
 
+from dash_emulator_quic.quic.event_parser import H3EventParser
 from dash_emulator_quic.quic.protocol import HttpProtocol
 
 
-class QuicClientImpl(DownloadManager):
+class QuicClient(DownloadManager, ABC):
+    @abstractmethod
+    async def wait_complete(self, url: str) -> bytes:
+        """
+        Wait until one url got downloaded completely
+        """
+        pass
+
+
+class QuicClientImpl(QuicClient):
+    """
+    QuickClientImpl will use only one thread, but be multiplexing by tuning a queue
+    """
+
     log = logging.getLogger("QuicClientImpl")
 
-    def __init__(self, event_listeners: List[DownloadEventListener], session_ticket: Optional[SessionTicket] = None):
+    def __init__(self,
+                 event_listeners: List[DownloadEventListener],
+                 event_parser: H3EventParser,
+                 session_ticket: Optional[SessionTicket] = None,
+                 ):
         """
         Parameters
         ----------
         event_listeners: List[DownloadEventListener]
             A list of event listeners
+        event_parser:
+            Parse the H3Events
         session_ticket : SessionTicket, optional
             The ticket containing the authentication information.
             With this ticket, The QUIC Client can have 0-RTT on the first request (if the server allows).
             The QUIC Client will use 0-RTT for the following requests no matter if this parameter is provided.
         """
         self.quic_configuration = QuicConfiguration(alpn_protocols=H3_ALPN, is_client=True)
+        self.event_parser = event_parser
         if session_ticket is not None:
             self.quic_configuration.session_ticket = session_ticket
         self.event_listeners = event_listeners
 
         self._client: Optional[HttpProtocol] = None
+
         self._close_event: Optional[asyncio.Event] = None
+        """
+        When this _close_event got set, the client will stop the connection completely.
+        """
+
+        self._canceled_urls: Set[str] = set()
+        self._event_queue: Optional[asyncio.Queue[Tuple[H3Event, str]]] = None
+        self._download_queue: Optional[asyncio.Queue[str]] = None
 
     @property
     def is_busy(self):
@@ -47,6 +78,9 @@ class QuicClientImpl(DownloadManager):
             False
         """
         return False
+
+    async def wait_complete(self, url) -> bytes:
+        return await self.event_parser.wait_complete(url)
 
     async def close(self):
         if self._close_event is not None:
@@ -64,7 +98,22 @@ class QuicClientImpl(DownloadManager):
         self.log.info("New session ticket received from server: " + ticket.server_name)
         self.quic_configuration.session_ticket = ticket
 
-    async def start(self, host, port, event=None):
+    async def _download_internal(self, url: str) -> AsyncIterator[Tuple[H3Event, str]]:
+        # TODO: check stop. If this is stopped, return
+        async for event in self._client.get(url):
+            yield event, url
+
+    async def _download_loop(self):
+        xs = aiostream.stream.call(self._download_queue.get)
+        xs = aiostream.stream.cycle(xs)
+        xs = aiostream.stream.map(xs, self._download_internal)
+        xs = aiostream.stream.flatten(xs)
+
+        async with xs.stream() as stream:
+            async for event, url in stream:
+                await self.event_parser.parse(url, event)
+
+    async def start(self, host, port, client_up_event=None):
         """
         Start the QUIC Client
 
@@ -74,11 +123,12 @@ class QuicClientImpl(DownloadManager):
             The hostname of the remote endpoint
         port: int
             The UDP port to connect to the remote endpoint
-        event: asyncio.Event, optional
+        client_up_event: asyncio.Event, optional
             If event is not None, set the event when the client is up
         """
 
         self._close_event = asyncio.Event()
+        self._event_queue = asyncio.Queue()
 
         async with connect(
                 host,
@@ -90,24 +140,21 @@ class QuicClientImpl(DownloadManager):
                 wait_connected=False,
         ) as client:
             self._client = client
-            if event is not None:
-                event.set()
+            # self._download_queue = asyncio.Queue()
+            self._download_queue = asyncio.Queue()
+            task = asyncio.create_task(self._download_loop())
+            if client_up_event is not None:
+                client_up_event.set()
             await self._close_event.wait()
+            task.cancel()
 
         self._client = None
         self._close_event = None
-
-    @staticmethod
-    def parse_headers(headers: List[Tuple[bytes, bytes]]) -> Dict[str, str]:
-        result = dict()
-        for header in headers:
-            key, value = header
-            result[key.decode('utf-8')] = value.decode('utf-8')
-        return result
+        self._event_queue = None
 
     async def download(self, url: str, save=False) -> Optional[bytes]:
+        # Client hasn't been started. Start the client.
         if self._client is None:
-            # parse URL
             parsed = urlparse(url)
             host = parsed.hostname
             if parsed.port is not None:
@@ -115,29 +162,13 @@ class QuicClientImpl(DownloadManager):
             else:
                 port = 443
             event = asyncio.Event()
-            asyncio.create_task(self.start(host, port, event=event))
+            asyncio.create_task(self.start(host, port, client_up_event=event))
             await event.wait()
 
         for listener in self.event_listeners:
             await listener.on_transfer_start(url)
-
-        client = cast(HttpProtocol, self._client)
-        data = bytearray()
-        headers = None
-        # perform request
-        async for event in client.get(url):
-            if isinstance(event, HeadersReceived):
-                headers = self.parse_headers(event.headers)
-                self.log.info("Header received")
-            else:
-                event = cast(DataReceived, event)
-                data.extend(event.data)
-                for listener in self.event_listeners:
-                    await listener.on_bytes_transferred(len(event.data), url, len(data),
-                                                        int(headers.get('content-length')))
-        for listener in self.event_listeners:
-            await listener.on_transfer_end(len(data), url)
-        return bytes(data) if save else None
+        await self._download_queue.put(url)
+        return None
 
     def add_listener(self, listener: DownloadEventListener):
         if listener not in self.event_listeners:

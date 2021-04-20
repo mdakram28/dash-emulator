@@ -1,10 +1,11 @@
 import asyncio
+import logging
 from types import SimpleNamespace
 
-import logging
 from behave import *
 
 from dash_emulator_quic.quic.client import QuicClientImpl
+from dash_emulator_quic.quic.event_parser import H3EventParserImpl
 
 use_step_matcher("re")
 
@@ -17,7 +18,7 @@ def step_impl(context):
     context : behave.runner.Context
     """
     context.args = SimpleNamespace()
-    context.args.quic_client = QuicClientImpl([])
+    context.args.quic_client = QuicClientImpl([], H3EventParserImpl())
 
 
 @when("The client is asked to get content from an URL")
@@ -41,9 +42,13 @@ def step_impl(context):
     """
     logging.basicConfig(level=logging.DEBUG)
     quic_client: QuicClientImpl = context.args.quic_client
+
     # asyncio.run(quic_client.get(context.args.url))
 
     async def foo():
         await quic_client.download(context.args.url1)
         await quic_client.download(context.args.url2)
+        await quic_client.wait_complete(context.args.url1)
+        await quic_client.wait_complete(context.args.url2)
+
     asyncio.run(foo())
