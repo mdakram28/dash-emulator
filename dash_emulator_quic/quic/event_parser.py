@@ -95,3 +95,5 @@ class H3EventParserImpl(H3EventParser):
 
     async def close_stream(self, url: str):
         self._partially_accepted_urls.add(url)
+        if url in self._waiting_urls:
+            self._waiting_urls[url].set()

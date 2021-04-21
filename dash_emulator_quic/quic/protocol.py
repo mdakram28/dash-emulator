@@ -16,7 +16,7 @@ from aioquic.h3.events import (
     HeadersReceived,
     PushPromiseReceived,
 )
-from aioquic.quic.events import QuicEvent
+from aioquic.quic.events import QuicEvent, StreamDataReceived
 
 logger = logging.getLogger("client")
 
@@ -123,6 +123,8 @@ class WebSocket:
 
 
 class HttpProtocol(QuicConnectionProtocol):
+    log = logging.getLogger("HttpProtocol")
+
     def __init__(self, *args, **kwargs) -> None:
         super().__init__(*args, **kwargs)
 
@@ -190,9 +192,11 @@ class HttpProtocol(QuicConnectionProtocol):
         return websocket
 
     def http_event_received(self, event: H3Event) -> None:
+        self.log.info(f"HTTP EVENT RECEIVED, type: {type(event)}")
         if isinstance(event, (HeadersReceived, DataReceived)):
             stream_id = event.stream_id
             if stream_id in self._request_events:
+                self.log.info(f"Put event in queue of stream {stream_id}")
                 # http
                 asyncio.ensure_future(self._request_events[event.stream_id].put(event))
             elif stream_id in self._websockets:
@@ -210,6 +214,8 @@ class HttpProtocol(QuicConnectionProtocol):
 
     def quic_event_received(self, event: QuicEvent) -> None:
         #  pass event to the HTTP layer
+        if isinstance(event, StreamDataReceived):
+            self.log.info(f"QUIC EVENT RECEIVED for stream {event.stream_id}")
         if self._http is not None:
             for http_event in self._http.handle_event(event):
                 self.http_event_received(http_event)
@@ -217,6 +223,7 @@ class HttpProtocol(QuicConnectionProtocol):
     async def _request(self, request: HttpRequest) -> AsyncIterator[H3Event]:
         stream_id = self._quic.get_next_available_stream_id()
         self._url_stream_id[request.url.url] = stream_id
+        self.log.info(f"Use stream id {stream_id} for url {request.url.url}")
         self._http.send_headers(
             stream_id=stream_id,
             headers=[
@@ -234,33 +241,27 @@ class HttpProtocol(QuicConnectionProtocol):
         self.transmit()
 
         while True:
-            task = asyncio.create_task(queue.get())
-            self._requests_tasks[request.url.url] = task
+            # task = asyncio.create_task(queue.get())
+            # self._requests_tasks[request.url.url] = task
             try:
-                event = await task
+                # event = await task
+                event = await queue.get()
                 if isinstance(event, DataReceived):
                     if event.stream_ended:
                         return
                 yield event
-            except asyncio.CancelledError:
+            except asyncio.CancelledError as e:
+                self.log.info(f"Cancel Reading {request.url.url}")
+                self.log.exception(e)
                 return
-
-    @staticmethod
-    def _encode_stop_sending_frame(stream_id) -> bytes:
-        b = bytearray()
-        b.extend(encode_variable_length_integer(0x05))  # STOP_SENDING
-        b.extend(encode_variable_length_integer(stream_id))
-        b.extend(encode_variable_length_integer(0))
-        return bytes(b)
-
-    async def close_stream(self, stream_id):
-        self._quic.send_datagram_frame(self._encode_stop_sending_frame(stream_id))
-        self.transmit()
 
     async def close_stream_of_url(self, url):
         stream_id = self._url_stream_id.get(url, None)
         assert stream_id is not None
-        await self.close_stream(stream_id)
+        self.log.info(f"Close Stream {stream_id} for URL {url}")
+        self._quic.reset_stream(stream_id, 0)
 
     def cancel_read(self, url):
-        self._requests_tasks[url].cancel()
+        # self.log.info(f"cancel_read: {url}")
+        # self._requests_tasks[url].cancel()
+        pass

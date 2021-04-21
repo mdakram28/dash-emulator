@@ -105,6 +105,7 @@ class QuicClientImpl(QuicClient):
 
     async def _download_internal(self, url: str) -> AsyncIterator[Tuple[H3Event, str]]:
         # TODO: check stop. If this is stopped, return
+        self.log.info(f"Downloading Internal: {url}")
         async for event in self._client.get(url):
             yield event, url
 

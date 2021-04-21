@@ -129,7 +129,8 @@ class BETAManagerImpl(BETAManager, DownloadEventListener, PlayerEventListener, S
         If there is a pending segment, cancel that segment request
         """
         self.log.info(f"Bytes received from {event.url}")
-        if self._pending_segment is not None and event.url == self._pending_segment.url and not self._pending_segment.canceled:
+        if self._pending_segment is not None and event.url != self._pending_segment.url:
+            self.log.info(f"Cancel pending segment {self._pending_segment.url}")
             self.download_manager.cancel_read_url(self._pending_segment.url)
             self._pending_segment = None
         elif self._pending_segment is not None and self._pending_segment.url == event.url:
@@ -170,5 +171,4 @@ class BETAManagerImpl(BETAManager, DownloadEventListener, PlayerEventListener, S
     async def _stop_download(self):
         self.log.info(f"BETA: Stop Downloading: {self._current_segment.url}")
         await self.download_manager.stop(self._current_segment.url)
-        self._current_segment.canceled = True
         self._pending_segment = self._current_segment
