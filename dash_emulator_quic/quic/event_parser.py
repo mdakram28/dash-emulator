@@ -1,7 +1,7 @@
 import asyncio
 import logging
 from abc import ABC, abstractmethod
-from typing import Dict, List, Tuple, cast
+from typing import Dict, List, Tuple, cast, Set
 
 from aioquic.h3.events import H3Event, HeadersReceived, DataReceived
 from dash_emulator.download import DownloadEventListener
@@ -9,7 +9,7 @@ from dash_emulator.download import DownloadEventListener
 
 class H3EventParser(ABC):
     @abstractmethod
-    async def wait_complete(self, url: str) -> bytes:
+    async def wait_complete(self, url: str) -> Tuple[bytes, int]:
         pass
 
     @abstractmethod
@@ -17,7 +17,11 @@ class H3EventParser(ABC):
         pass
 
     @abstractmethod
-    async def add_listener(self, listener: DownloadEventListener):
+    def add_listener(self, listener: DownloadEventListener):
+        pass
+
+    @abstractmethod
+    async def close_stream(self, url: str):
         pass
 
 
@@ -31,6 +35,7 @@ class H3EventParserImpl(H3EventParser):
         self._waiting_urls: Dict[str, asyncio.Event] = dict()
         self._content_lengths: Dict[str, int] = dict()
         self._contents: Dict[str, bytearray] = dict()
+        self._partially_accepted_urls: Set[str] = set()
 
     @staticmethod
     def parse_headers(headers: List[Tuple[bytes, bytes]]) -> Dict[str, str]:
@@ -40,7 +45,10 @@ class H3EventParserImpl(H3EventParser):
             result[key.decode('utf-8')] = value.decode('utf-8')
         return result
 
-    async def wait_complete(self, url: str) -> bytes:
+    async def wait_complete(self, url: str) -> Tuple[bytes, int]:
+        if url in self._partially_accepted_urls:
+            content = self._contents[url]
+            return bytes(content), self._content_lengths[url]
         if url not in self._completed_urls:
             self._waiting_urls[url] = asyncio.Event()
             await self._waiting_urls[url].wait()
@@ -48,9 +56,10 @@ class H3EventParserImpl(H3EventParser):
         if url in self._completed_urls:
             self._completed_urls.remove(url)
         content = self._contents[url]
+        size = self._content_lengths[url]
         del self._contents[url]
         del self._content_lengths[url]
-        return bytes(content)
+        return bytes(content), size
 
     async def parse(self, url: str, event: H3Event):
         self.log.debug(f"Event received for {url}")
@@ -71,6 +80,9 @@ class H3EventParserImpl(H3EventParser):
             for listener in self.listeners:
                 await listener.on_bytes_transferred(len(event.data), url, position, size)
 
+            if url in self._partially_accepted_urls:
+                return
+
             if size == position:
                 self._completed_urls.add(url)
                 if url in self._waiting_urls:
@@ -78,5 +90,8 @@ class H3EventParserImpl(H3EventParser):
                 for listener in self.listeners:
                     await listener.on_transfer_end(size, url)
 
-    async def add_listener(self, listener: DownloadEventListener):
+    def add_listener(self, listener: DownloadEventListener):
         self.listeners.append(listener)
+
+    async def close_stream(self, url: str):
+        self._partially_accepted_urls.add(url)

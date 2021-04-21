@@ -15,7 +15,7 @@ from dash_emulator_quic.quic.client import QuicClient
 
 class BETAScheduler(Scheduler, ABC):
     @abstractmethod
-    def cancel_task(self, index):
+    async def cancel_task(self, index):
         pass
 
 
@@ -63,9 +63,9 @@ class BETASchedulerImpl(BETAScheduler):
         self.started = False
 
         self._task: Optional[Task] = None
-        self._download_task: Optional[Task] = None
         self._index = 0
         self._representation_initialized: Set[str] = set()
+        self._current_selections: Optional[Dict[int, int]] = None
 
         self._end = False
 
@@ -78,6 +78,7 @@ class BETASchedulerImpl(BETAScheduler):
 
             # Download one segment from each adaptation set
             selections = self.abr_controller.update_selection(self.adaptation_sets)
+            self._current_selections = selections
             for listener in self.listeners:
                 await listener.on_segment_download_start(self._index, selections)
             duration = 0
@@ -89,6 +90,7 @@ class BETASchedulerImpl(BETAScheduler):
                 if representation_str not in self._representation_initialized:
                     await self.download_manager.download(representation.initialization)
                     await self.download_manager.wait_complete(representation.initialization)
+                    self.log.info(f"Segment {self._index} Complete. Move to next segment")
                     self._representation_initialized.add(representation_str)
                 try:
                     segment = representation.segments[self._index]
@@ -121,7 +123,7 @@ class BETASchedulerImpl(BETAScheduler):
     def is_end(self):
         return self._end
 
-    def cancel_task(self, index: int):
+    async def cancel_task(self, index: int):
         """
         Cancel current downloading task, and move to the next one
 
@@ -132,7 +134,14 @@ class BETASchedulerImpl(BETAScheduler):
         """
 
         # If the index is the the index of currently downloading segment, ignore it
-        if self._index != index:
+        if self._index != index or self._current_selections is None:
             return
-        if self._download_task is not None:
-            self._download_task.cancel()
+
+        # Do not cancel the task for the first index
+        if index == 0:
+            return
+
+        for adaptation_set_id, selection in self._current_selections.items():
+            segment = self.adaptation_sets[adaptation_set_id].representations[selection].segments[self._index]
+            self.log.debug(f"BETA: Stop current downloading URL: {segment.url}")
+            await self.download_manager.stop(segment.url)

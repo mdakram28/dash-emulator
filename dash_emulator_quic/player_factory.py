@@ -13,6 +13,7 @@ from dash_emulator_quic.beta.vq_threshold import MockVQThresholdManager
 from dash_emulator_quic.mpd.providers import BETAMPDProviderImpl
 from dash_emulator_quic.quic.client import QuicClientImpl
 from dash_emulator_quic.quic.event_parser import H3EventParserImpl
+from dash_emulator_quic.scheduler.scheduler import BETAScheduler, BETASchedulerImpl
 
 
 def build_dash_player_over_quic(beta=False):
@@ -56,8 +57,9 @@ def build_dash_player_over_quic(beta=False):
         h3_event_parser.add_listener(beta_manager)
 
         abr_controller = DashABRController(2, 4, bandwidth_meter, buffer_manager)
-        scheduler: Scheduler = SchedulerImpl(5, cfg.update_interval, download_manager, bandwidth_meter, buffer_manager,
-                                             abr_controller, [event_logger, beta_manager])
+        scheduler: BETAScheduler = BETASchedulerImpl(5, cfg.update_interval, download_manager, bandwidth_meter,
+                                                     buffer_manager,
+                                                     abr_controller, [event_logger, beta_manager])
         return DASHPlayer(cfg.update_interval, min_rebuffer_duration=1, min_start_buffer_duration=2,
                           buffer_manager=buffer_manager, mpd_provider=mpd_provider, scheduler=scheduler,
                           listeners=[event_logger, beta_manager], services=[beta_manager])

@@ -5,7 +5,7 @@ from abc import abstractmethod
 from typing import Optional
 
 from dash_emulator.bandwidth import BandwidthUpdateListener
-from dash_emulator.download import DownloadEventListener, DownloadManager
+from dash_emulator.download import DownloadEventListener
 from dash_emulator.mpd import MPDProvider
 from dash_emulator.player import PlayerEventListener
 from dash_emulator.scheduler import SchedulerEventListener
@@ -14,6 +14,7 @@ from dash_emulator.service import AsyncService
 from dash_emulator_quic.beta.events import *
 from dash_emulator_quic.beta.vq_threshold import VQThresholdManager
 from dash_emulator_quic.models import SegmentRequest
+from dash_emulator_quic.quic.client import QuicClient
 
 
 class BETAManager(AsyncService):
@@ -33,7 +34,7 @@ class BETAManagerImpl(BETAManager, DownloadEventListener, PlayerEventListener, S
 
     def __init__(self,
                  mpd_provider: MPDProvider,
-                 download_manager: DownloadManager,
+                 download_manager: QuicClient,
                  vq_threshold_manager: VQThresholdManager,
                  panic_buffer_level: float):
         """
@@ -119,6 +120,7 @@ class BETAManagerImpl(BETAManager, DownloadEventListener, PlayerEventListener, S
             return
 
     async def _transfer_start(self, event: TransferStartEvent):
+        self.log.info(f"Start downloading {event.url}")
         self._current_segment.url = event.url
 
     async def _bytes_transferred(self, event: BytesTransferredEvent):
@@ -126,10 +128,12 @@ class BETAManagerImpl(BETAManager, DownloadEventListener, PlayerEventListener, S
         First packet comes in.
         If there is a pending segment, cancel that segment request
         """
-        if self._pending_segment is not None and not self._pending_segment.canceled:
-            self.log.debug(f"BETA: has pending segment of index {self._pending_segment.index}, stop downloading")
-            self._pending_segment.canceled = True
-            await self.download_manager.stop(self._pending_segment.url)
+        self.log.info(f"Bytes received from {event.url}")
+        if self._pending_segment is not None and event.url == self._pending_segment.url and not self._pending_segment.canceled:
+            self.download_manager.cancel_read_url(self._pending_segment.url)
+            self._pending_segment = None
+        elif self._pending_segment is not None and self._pending_segment.url == event.url:
+            return
 
         if self._state != State.READY:
             return
@@ -138,7 +142,7 @@ class BETAManagerImpl(BETAManager, DownloadEventListener, PlayerEventListener, S
             self._current_segment.first_bytes_received = True
             timeout_value = (event.size - event.length) * 8 / self._bw
             max_timeout_value = timeout_value * 2
-            self.log.debug(f"BETA: BETA calculate timeout: {timeout_value}, max timeout {max_timeout_value}")
+            self.log.info(f"BETA: BETA calculate timeout: {timeout_value}, max timeout {max_timeout_value}")
             self._timeout = datetime.datetime.now() + datetime.timedelta(seconds=timeout_value)
             self._max_timeout = datetime.datetime.now() + datetime.timedelta(seconds=max_timeout_value)
             return
@@ -164,4 +168,7 @@ class BETAManagerImpl(BETAManager, DownloadEventListener, PlayerEventListener, S
             return
 
     async def _stop_download(self):
-        pass
+        self.log.info(f"BETA: Stop Downloading: {self._current_segment.url}")
+        await self.download_manager.stop(self._current_segment.url)
+        self._current_segment.canceled = True
+        self._pending_segment = self._current_segment

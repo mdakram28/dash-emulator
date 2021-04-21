@@ -37,7 +37,7 @@ class BETAMPDProviderImpl(MPDProvider):
 
     async def update(self):
         await self.download_manager.download(self.mpd_url, save=True)
-        content = await self.download_manager.wait_complete(self.mpd_url)
+        content, size = await self.download_manager.wait_complete(self.mpd_url)
         text = content.decode("utf-8")
         self._mpd = self.parser.parse(text, url=self.mpd_url)
 

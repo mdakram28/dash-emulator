@@ -24,6 +24,10 @@ class QuicClient(DownloadManager, ABC):
         """
         pass
 
+    @abstractmethod
+    def cancel_read_url(self, url: str):
+        pass
+
 
 class QuicClientImpl(QuicClient):
     """
@@ -79,7 +83,7 @@ class QuicClientImpl(QuicClient):
         """
         return False
 
-    async def wait_complete(self, url) -> bytes:
+    async def wait_complete(self, url) -> Tuple[bytes, int]:
         return await self.event_parser.wait_complete(url)
 
     async def close(self):
@@ -89,6 +93,7 @@ class QuicClientImpl(QuicClient):
     async def stop(self, url: str):
         if self._client is not None:
             await self._client.close_stream_of_url(url)
+            await self.event_parser.close_stream(url)
 
     def save_session_ticket(self, ticket: SessionTicket) -> None:
         """
@@ -173,3 +178,7 @@ class QuicClientImpl(QuicClient):
     def add_listener(self, listener: DownloadEventListener):
         if listener not in self.event_listeners:
             self.event_listeners.append(listener)
+
+    def cancel_read_url(self, url: str):
+        if self._client is not None:
+            self._client.cancel_read(url)

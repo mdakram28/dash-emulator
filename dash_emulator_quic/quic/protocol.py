@@ -131,6 +131,7 @@ class HttpProtocol(QuicConnectionProtocol):
         self._request_events: Dict[int, asyncio.Queue[H3Event]] = {}
         self._websockets: Dict[int, WebSocket] = {}
         self._url_stream_id: Dict[str, int] = {}
+        self._requests_tasks: Dict[str, asyncio.Task] = {}
 
         if self._quic.configuration.alpn_protocols[0].startswith("hq-"):
             self._http = H0Connection(self._quic)
@@ -233,11 +234,16 @@ class HttpProtocol(QuicConnectionProtocol):
         self.transmit()
 
         while True:
-            event = await queue.get()
-            if isinstance(event, DataReceived):
-                if event.stream_ended:
-                    return
-            yield event
+            task = asyncio.create_task(queue.get())
+            self._requests_tasks[request.url.url] = task
+            try:
+                event = await task
+                if isinstance(event, DataReceived):
+                    if event.stream_ended:
+                        return
+                yield event
+            except asyncio.CancelledError:
+                return
 
     @staticmethod
     def _encode_stop_sending_frame(stream_id) -> bytes:
@@ -255,3 +261,6 @@ class HttpProtocol(QuicConnectionProtocol):
         stream_id = self._url_stream_id.get(url, None)
         assert stream_id is not None
         await self.close_stream(stream_id)
+
+    def cancel_read(self, url):
+        self._requests_tasks[url].cancel()
