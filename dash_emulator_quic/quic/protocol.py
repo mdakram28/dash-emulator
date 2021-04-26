@@ -192,11 +192,9 @@ class HttpProtocol(QuicConnectionProtocol):
         return websocket
 
     def http_event_received(self, event: H3Event) -> None:
-        self.log.info(f"HTTP EVENT RECEIVED, type: {type(event)}")
         if isinstance(event, (HeadersReceived, DataReceived)):
             stream_id = event.stream_id
             if stream_id in self._request_events:
-                self.log.info(f"Put event in queue of stream {stream_id}")
                 # http
                 asyncio.ensure_future(self._request_events[event.stream_id].put(event))
             elif stream_id in self._websockets:
@@ -214,8 +212,6 @@ class HttpProtocol(QuicConnectionProtocol):
 
     def quic_event_received(self, event: QuicEvent) -> None:
         #  pass event to the HTTP layer
-        if isinstance(event, StreamDataReceived):
-            self.log.info(f"QUIC EVENT RECEIVED for stream {event.stream_id}")
         if self._http is not None:
             for http_event in self._http.handle_event(event):
                 self.http_event_received(http_event)

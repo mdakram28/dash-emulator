@@ -4,7 +4,6 @@ from abc import ABC, abstractmethod
 from typing import List, Optional, Tuple, Set, AsyncIterator
 from urllib.parse import urlparse
 
-import aiostream
 from aioquic.asyncio import connect
 from aioquic.h3.connection import H3_ALPN
 from aioquic.h3.events import H3Event
@@ -110,14 +109,22 @@ class QuicClientImpl(QuicClient):
             yield event, url
 
     async def _download_loop(self):
-        xs = aiostream.stream.call(self._download_queue.get)
-        xs = aiostream.stream.cycle(xs)
-        xs = aiostream.stream.map(xs, self._download_internal)
-        xs = aiostream.stream.flatten(xs)
+        queue = asyncio.Queue()
 
-        async with xs.stream() as stream:
-            async for event, url in stream:
-                await self.event_parser.parse(url, event)
+        async def drain(iterator: AsyncIterator):
+            async for i in iterator:
+                await queue.put(i)
+
+        async def read_new_request():
+            while True:
+                url = await self._download_queue.get()
+                iter = self._download_internal(url)
+                asyncio.create_task(drain(iter))
+
+        asyncio.create_task(read_new_request())
+        while True:
+            event, url = await queue.get()
+            await self.event_parser.parse(url, event)
 
     async def start(self, host, port, client_up_event=None):
         """
