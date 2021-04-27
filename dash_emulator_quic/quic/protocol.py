@@ -237,11 +237,10 @@ class HttpProtocol(QuicConnectionProtocol):
         self.transmit()
 
         while True:
-            # task = asyncio.create_task(queue.get())
-            # self._requests_tasks[request.url.url] = task
+            task = asyncio.create_task(queue.get())
+            self._requests_tasks[request.url.url] = task
             try:
-                # event = await task
-                event = await queue.get()
+                event = await task
                 if isinstance(event, DataReceived):
                     if event.stream_ended:
                         return
@@ -254,10 +253,9 @@ class HttpProtocol(QuicConnectionProtocol):
     async def close_stream_of_url(self, url):
         stream_id = self._url_stream_id.get(url, None)
         assert stream_id is not None
-        self.log.info(f"Close Stream {stream_id} for URL {url}")
-        self._quic.reset_stream(stream_id, 0)
+        self.log.info(f"Send STOP_SENDING, stream id: {stream_id}, URL: {url}")
+        self._quic.send_stop_sending(stream_id, 0)
 
     def cancel_read(self, url):
-        # self.log.info(f"cancel_read: {url}")
-        # self._requests_tasks[url].cancel()
-        pass
+        self.log.info(f"cancel_read: {url}")
+        self._requests_tasks[url].cancel()

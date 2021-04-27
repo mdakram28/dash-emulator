@@ -57,8 +57,6 @@ class H3EventParserImpl(H3EventParser):
             self._completed_urls.remove(url)
         content = self._contents[url]
         size = self._content_lengths[url]
-        del self._contents[url]
-        del self._content_lengths[url]
         return bytes(content), size
 
     async def parse(self, url: str, event: H3Event):
