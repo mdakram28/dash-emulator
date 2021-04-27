@@ -1,3 +1,5 @@
+from typing import Tuple
+
 from dash_emulator.abr import DashABRController
 from dash_emulator.bandwidth import BandwidthMeterImpl
 from dash_emulator.buffer import BufferManager, BufferManagerImpl
@@ -8,6 +10,7 @@ from dash_emulator.mpd.parser import DefaultMPDParser
 from dash_emulator.player import DASHPlayer
 from dash_emulator.scheduler import SchedulerImpl, Scheduler
 
+from dash_emulator_quic.analyzers.analyer import BETAPlaybackAnalyzer, BETAPlaybackAnalyzerConfig, PlaybackAnalyzer
 from dash_emulator_quic.beta.beta import BETAManagerImpl
 from dash_emulator_quic.beta.vq_threshold import MockVQThresholdManager
 from dash_emulator_quic.mpd.providers import BETAMPDProviderImpl
@@ -16,7 +19,7 @@ from dash_emulator_quic.quic.event_parser import H3EventParserImpl
 from dash_emulator_quic.scheduler.scheduler import BETAScheduler, BETASchedulerImpl
 
 
-def build_dash_player_over_quic(beta=False):
+def build_dash_player_over_quic(beta=False, plot_output=None) -> Tuple[DASHPlayer, PlaybackAnalyzer]:
     """
     Build a MPEG-DASH Player over QUIC network
 
@@ -29,24 +32,26 @@ def build_dash_player_over_quic(beta=False):
         cfg = Config
         buffer_manager: BufferManager = BufferManagerImpl()
         event_logger = EventLogger()
+        analyzer: BETAPlaybackAnalyzer = BETAPlaybackAnalyzer(BETAPlaybackAnalyzerConfig(save_plots_dir=plot_output))
         mpd_provider: MPDProvider = BETAMPDProviderImpl(DefaultMPDParser(), cfg.update_interval,
                                                         QuicClientImpl([], event_parser=H3EventParserImpl()))
-        bandwidth_meter = BandwidthMeterImpl(cfg.max_initial_bitrate, cfg.smoothing_factor, [])
+        bandwidth_meter = BandwidthMeterImpl(cfg.max_initial_bitrate, cfg.smoothing_factor, [analyzer])
         h3_event_parser = H3EventParserImpl(listeners=[bandwidth_meter])
         download_manager = QuicClientImpl([bandwidth_meter], event_parser=h3_event_parser)
         abr_controller = DashABRController(2, 4, bandwidth_meter, buffer_manager)
         scheduler: Scheduler = SchedulerImpl(5, cfg.update_interval, download_manager, bandwidth_meter, buffer_manager,
-                                             abr_controller, [event_logger])
+                                             abr_controller, [event_logger, analyzer])
         return DASHPlayer(cfg.update_interval, min_rebuffer_duration=1, min_start_buffer_duration=2,
                           buffer_manager=buffer_manager, mpd_provider=mpd_provider, scheduler=scheduler,
-                          listeners=[event_logger])
+                          listeners=[event_logger, analyzer]), analyzer
     else:
         cfg = Config
         buffer_manager: BufferManager = BufferManagerImpl()
         event_logger = EventLogger()
+        analyzer: BETAPlaybackAnalyzer = BETAPlaybackAnalyzer(BETAPlaybackAnalyzerConfig(save_plots_dir=plot_output))
         mpd_provider: MPDProvider = BETAMPDProviderImpl(DefaultMPDParser(), cfg.update_interval,
                                                         QuicClientImpl([], H3EventParserImpl()))
-        bandwidth_meter = BandwidthMeterImpl(cfg.max_initial_bitrate, cfg.smoothing_factor, [])
+        bandwidth_meter = BandwidthMeterImpl(cfg.max_initial_bitrate, cfg.smoothing_factor, [analyzer])
         h3_event_parser = H3EventParserImpl([bandwidth_meter])
         download_manager = QuicClientImpl([bandwidth_meter], h3_event_parser)
 
@@ -59,7 +64,7 @@ def build_dash_player_over_quic(beta=False):
         abr_controller = DashABRController(2, 4, bandwidth_meter, buffer_manager)
         scheduler: BETAScheduler = BETASchedulerImpl(5, cfg.update_interval, download_manager, bandwidth_meter,
                                                      buffer_manager,
-                                                     abr_controller, [event_logger, beta_manager])
+                                                     abr_controller, [event_logger, beta_manager, analyzer])
         return DASHPlayer(cfg.update_interval, min_rebuffer_duration=1, min_start_buffer_duration=2,
                           buffer_manager=buffer_manager, mpd_provider=mpd_provider, scheduler=scheduler,
-                          listeners=[event_logger, beta_manager], services=[beta_manager])
+                          listeners=[event_logger, beta_manager, analyzer], services=[beta_manager]), analyzer

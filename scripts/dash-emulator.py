@@ -23,9 +23,7 @@ def create_parser():
 
     arg_parser.add_argument("--beta", action="store_true", help="Enable BETA")
     arg_parser.add_argument("--proxy", type=str, help='NOT IMPLEMENTED YET')
-    arg_parser.add_argument("--output", type=str, required=False, default=None,
-                            help="Path to output folder. Indicate this argument to save videos and related data.")
-    arg_parser.add_argument("--plot", required=False, default=False, action='store_true')
+    arg_parser.add_argument("--plot", required=False, default=None, type=str, help="The folder to save plots")
     arg_parser.add_argument("-y", required=False, default=False, action='store_true',
                             help="Automatically overwrite output folder")
     arg_parser.add_argument(PLAYER_TARGET, type=str, help="Target MPD file link")
@@ -49,8 +47,8 @@ def validate_args(arguments: Dict[str, Union[int, str, None]]) -> bool:
     # TODO
 
     # Validate Output
-    if arguments["output"] is not None:
-        path = pathlib.Path(arguments['output'])
+    if arguments["plot"] is not None:
+        path = pathlib.Path(arguments['plot'])
         path.mkdir(parents=True, exist_ok=True)
 
     return True
@@ -78,10 +76,11 @@ if __name__ == '__main__':
 
 
     async def main():
-        player = build_dash_player_over_quic(beta=args["beta"])
+        player, analyzer = build_dash_player_over_quic(beta=args["beta"], plot_output=args["plot"])
         # player = build_dash_player()
 
         await player.start(args["target"])
+        analyzer.save(sys.stdout)
 
 
     asyncio.run(main())
