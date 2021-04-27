@@ -4,12 +4,12 @@ from abc import ABC, abstractmethod
 from asyncio import Task
 from typing import Dict, Optional, Set, List
 
-from dash_emulator.abr import ABRController
 from dash_emulator.bandwidth import BandwidthMeter
 from dash_emulator.buffer import BufferManager
 from dash_emulator.models import AdaptationSet
 from dash_emulator.scheduler import Scheduler, SchedulerEventListener
 
+from dash_emulator_quic.abr import ExtendedABRController
 from dash_emulator_quic.quic.client import QuicClient
 
 
@@ -28,7 +28,7 @@ class BETASchedulerImpl(BETAScheduler):
                  download_manager: QuicClient,
                  bandwidth_meter: BandwidthMeter,
                  buffer_manager: BufferManager,
-                 abr_controller: ABRController,
+                 abr_controller: ExtendedABRController,
                  listeners: List[SchedulerEventListener]):
         """
         Parameters

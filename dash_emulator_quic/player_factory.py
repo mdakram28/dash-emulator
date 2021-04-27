@@ -10,6 +10,7 @@ from dash_emulator.mpd.parser import DefaultMPDParser
 from dash_emulator.player import DASHPlayer
 from dash_emulator.scheduler import SchedulerImpl, Scheduler
 
+from dash_emulator_quic.abr import ExtendedABRController, BetaABRController
 from dash_emulator_quic.analyzers.analyer import BETAPlaybackAnalyzer, BETAPlaybackAnalyzerConfig, PlaybackAnalyzer
 from dash_emulator_quic.beta.beta import BETAManagerImpl
 from dash_emulator_quic.beta.vq_threshold import MockVQThresholdManager
@@ -61,7 +62,10 @@ def build_dash_player_over_quic(beta=False, plot_output=None) -> Tuple[DASHPlaye
         bandwidth_meter.add_listener(beta_manager)
         h3_event_parser.add_listener(beta_manager)
 
-        abr_controller = DashABRController(2, 4, bandwidth_meter, buffer_manager)
+        abr_controller: ExtendedABRController = BetaABRController(
+            DashABRController(2, 4, bandwidth_meter, buffer_manager)
+        )
+
         scheduler: BETAScheduler = BETASchedulerImpl(5, cfg.update_interval, download_manager, bandwidth_meter,
                                                      buffer_manager,
                                                      abr_controller, [event_logger, beta_manager, analyzer])
