@@ -17,14 +17,31 @@ from dash_emulator_quic.quic.protocol import HttpProtocol
 
 class QuicClient(DownloadManager, ABC):
     @abstractmethod
-    async def wait_complete(self, url: str) -> bytes:
+    async def wait_complete(self, url: str) -> Optional[Tuple[bytes, int]]:
         """
-        Wait until one url got downloaded completely
+        Wait the stream to complete
+
+        Parameters
+        ----------
+        url:
+            The URL to wait for
+
+        Returns
+        -------
+            The return value could be None, meaning that the stream got dropped.
+            It could be a tuple, the bytes as the first element and size as the second element.
         """
         pass
 
     @abstractmethod
     def cancel_read_url(self, url: str):
+        pass
+
+    @abstractmethod
+    def drop_url(self, url: str):
+        """
+        Drop the URL downloading process
+        """
         pass
 
 
@@ -82,7 +99,7 @@ class QuicClientImpl(QuicClient):
         """
         return False
 
-    async def wait_complete(self, url) -> Tuple[bytes, int]:
+    async def wait_complete(self, url) -> Optional[Tuple[bytes, int]]:
         return await self.event_parser.wait_complete(url)
 
     async def close(self):
@@ -103,7 +120,6 @@ class QuicClientImpl(QuicClient):
         self.quic_configuration.session_ticket = ticket
 
     async def _download_internal(self, url: str) -> AsyncIterator[Tuple[H3Event, str]]:
-        # TODO: check stop. If this is stopped, return
         self.log.info(f"Downloading Internal: {url}")
         async for event in self._client.get(url):
             yield event, url
@@ -190,3 +206,6 @@ class QuicClientImpl(QuicClient):
     def cancel_read_url(self, url: str):
         if self._client is not None:
             self._client.cancel_read(url)
+
+    def drop_url(self, url: str):
+        self.event_parser.drop_stream(url)

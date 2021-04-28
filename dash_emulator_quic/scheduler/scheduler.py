@@ -18,6 +18,10 @@ class BETAScheduler(Scheduler, ABC):
     async def cancel_task(self, index):
         pass
 
+    @abstractmethod
+    async def drop_index(self, index):
+        pass
+
 
 class BETASchedulerImpl(BETAScheduler):
     log = logging.getLogger("BETASchedulerImpl")
@@ -68,6 +72,7 @@ class BETASchedulerImpl(BETAScheduler):
         self._current_selections: Optional[Dict[int, int]] = None
 
         self._end = False
+        self._dropped_index = None
 
     async def loop(self):
         while True:
@@ -77,7 +82,10 @@ class BETASchedulerImpl(BETAScheduler):
                 continue
 
             # Download one segment from each adaptation set
-            selections = self.abr_controller.update_selection(self.adaptation_sets)
+            if self._index == self._dropped_index:
+                selections = self.abr_controller.update_selection(self.adaptation_sets, choose_lowest=True)
+            else:
+                selections = self.abr_controller.update_selection(self.adaptation_sets)
             self._current_selections = selections
             for listener in self.listeners:
                 await listener.on_segment_download_start(self._index, selections)
@@ -100,8 +108,10 @@ class BETASchedulerImpl(BETAScheduler):
                 urls.append(segment.url)
                 await self.download_manager.download(segment.url)
                 duration = segment.duration
-            for url in urls:
-                await self.download_manager.wait_complete(url)
+            results = [await self.download_manager.wait_complete(url) for url in urls]
+            if any([result is None for result in results]):
+                # Result is None means the stream got dropped
+                continue
             for listener in self.listeners:
                 await listener.on_segment_download_complete(self._index)
             self._index += 1
@@ -145,3 +155,6 @@ class BETASchedulerImpl(BETAScheduler):
             segment = self.adaptation_sets[adaptation_set_id].representations[selection].segments[self._index]
             self.log.debug(f"BETA: Stop current downloading URL: {segment.url}")
             await self.download_manager.stop(segment.url)
+
+    async def drop_index(self, index):
+        self._dropped_index = index

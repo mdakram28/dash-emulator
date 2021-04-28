@@ -1,7 +1,7 @@
 import asyncio
 import logging
 from abc import ABC, abstractmethod
-from typing import Dict, List, Tuple, cast, Set
+from typing import Dict, List, Tuple, cast, Set, Optional
 
 from aioquic.h3.events import H3Event, HeadersReceived, DataReceived
 from dash_emulator.download import DownloadEventListener
@@ -9,7 +9,20 @@ from dash_emulator.download import DownloadEventListener
 
 class H3EventParser(ABC):
     @abstractmethod
-    async def wait_complete(self, url: str) -> Tuple[bytes, int]:
+    async def wait_complete(self, url: str) -> Optional[Tuple[bytes, int]]:
+        """
+        Wait the stream to complete
+
+        Parameters
+        ----------
+        url:
+            The URL to wait for
+
+        Returns
+        -------
+            The return value could be None, meaning that the stream got dropped.
+            It could be a tuple, the bytes as the first element and size as the second element.
+        """
         pass
 
     @abstractmethod
@@ -22,6 +35,18 @@ class H3EventParser(ABC):
 
     @abstractmethod
     async def close_stream(self, url: str):
+        """
+        Cancel waiting for streams.
+        wait_complete will return the bytes and size it has been read
+        """
+        pass
+
+    @abstractmethod
+    async def drop_stream(self, url: str):
+        """
+        Drop the stream and stop reading immediately.
+        wait_complete will return None when this method got invoked
+        """
         pass
 
 
@@ -36,6 +61,7 @@ class H3EventParserImpl(H3EventParser):
         self._content_lengths: Dict[str, int] = dict()
         self._contents: Dict[str, bytearray] = dict()
         self._partially_accepted_urls: Set[str] = set()
+        self._canceled_urls: Set[str] = set()
 
     @staticmethod
     def parse_headers(headers: List[Tuple[bytes, bytes]]) -> Dict[str, str]:
@@ -45,14 +71,23 @@ class H3EventParserImpl(H3EventParser):
             result[key.decode('utf-8')] = value.decode('utf-8')
         return result
 
-    async def wait_complete(self, url: str) -> Tuple[bytes, int]:
+    async def wait_complete(self, url: str) -> Optional[Tuple[bytes, int]]:
+        # If url is in partially accepted set, return read bytes and length
         if url in self._partially_accepted_urls:
             content = self._contents[url]
             return bytes(content), self._content_lengths[url]
+        # If the url has been dropped, return None
+        if url in self._canceled_urls:
+            return None
+        # Wait the url to be completed
         if url not in self._completed_urls:
             self._waiting_urls[url] = asyncio.Event()
             await self._waiting_urls[url].wait()
             del self._waiting_urls[url]
+        # If the url has been canceled, return None
+        if url in self._canceled_urls:
+            self._canceled_urls.remove(url)
+            return None
         if url in self._completed_urls:
             self._completed_urls.remove(url)
         content = self._contents[url]
@@ -93,5 +128,10 @@ class H3EventParserImpl(H3EventParser):
 
     async def close_stream(self, url: str):
         self._partially_accepted_urls.add(url)
+        if url in self._waiting_urls:
+            self._waiting_urls[url].set()
+
+    async def drop_stream(self, url: str):
+        self._canceled_urls.add(url)
         if url in self._waiting_urls:
             self._waiting_urls[url].set()
