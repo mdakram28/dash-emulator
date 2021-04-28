@@ -35,8 +35,10 @@ class BETAPlaybackAnalyzer(PlaybackAnalyzer, PlayerEventListener, SchedulerEvent
         self._buffer_levels: List[Tuple[float, float]] = []
         self._throughputs: List[Tuple[float, int]] = []
         self._states: List[Tuple[float, State]] = []
-        self._segments: List[Tuple[float, float, int]] = []  # start time, completion time, quality selection
-        self._current_segment: List[Union[int, float]] = [0, 0, 0, 0]  # index, start time, completion time, quality
+        self._segments: List[
+            Tuple[float, float, int, int]] = []  # start time, completion time, quality selection, bandwidth
+        self._current_segment: List[Union[int, float]] = [0, 0, 0, 0,
+                                                          0]  # index, start time, completion time, quality, bandwidth
 
     @staticmethod
     def _seconds_since(start_time: float):
@@ -49,25 +51,28 @@ class BETAPlaybackAnalyzer(PlaybackAnalyzer, PlayerEventListener, SchedulerEvent
         self._buffer_levels.append((self._seconds_since(self._start_time), buffer_level))
 
     async def on_segment_download_start(self, index, selections):
-        self._current_segment = [index, self._seconds_since(self._start_time), None, selections[0]]
+        if len(self._throughputs) != 0:
+            self._current_segment = [index, self._seconds_since(self._start_time), None, selections[0], self._throughputs[-1][1]]
+        else:
+            self._current_segment = [index, self._seconds_since(self._start_time), None, selections[0], 0]
 
     async def on_segment_download_complete(self, index):
         completion_time = self._seconds_since(self._start_time)
         self._current_segment[2] = completion_time
 
-        index, start_time, _, selection = self._current_segment
+        index, start_time, _, selection, thoughput = self._current_segment
 
-        self._segments.append((start_time, completion_time, selection))
+        self._segments.append((start_time, completion_time, selection, thoughput))
         assert len(self._segments) == index + 1
 
     async def on_bandwidth_update(self, bw: int) -> None:
         self._throughputs.append((self._seconds_since(self._start_time), bw))
 
     def save(self, output: io.TextIOBase) -> None:
-        output.write("%-10s%-10s%-10s%-10s\n" % ('Index', 'Start', 'End', 'Quality'))
+        output.write("%-10s%-10s%-10s%-10s%-10s\n" % ('Index', 'Start', 'End', 'Quality', 'Throughput'))
         for index, segment in enumerate(self._segments):
-            start, end, selection = segment
-            output.write("%-10d%-10.2f%-10.2f%-10d\n" % (index, start, end, selection))
+            start, end, selection, throughput = segment
+            output.write("%-10d%-10.2f%-10.2f%-10d%-10d\n" % (index, start, end, selection, throughput))
         output.write("\n")
         output.write("Stalls:\n")
         output.write("%-6s%-6s%-6s\n" % ("Start", "End", "Duration"))
