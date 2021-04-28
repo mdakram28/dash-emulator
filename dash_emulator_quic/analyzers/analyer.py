@@ -1,5 +1,6 @@
 import datetime
 import io
+import logging
 import os
 from abc import ABC, abstractmethod
 from typing import List, Tuple, Union
@@ -26,6 +27,8 @@ class BETAPlaybackAnalyzerConfig:
 
 class BETAPlaybackAnalyzer(PlaybackAnalyzer, PlayerEventListener, SchedulerEventListener,
                            BandwidthUpdateListener):
+    log = logging.getLogger("BETAPlaybackAnalyzer")
+
     def __init__(self, config: BETAPlaybackAnalyzerConfig):
         self.config = config
         self._start_time = datetime.datetime.now().timestamp()
@@ -65,6 +68,17 @@ class BETAPlaybackAnalyzer(PlaybackAnalyzer, PlayerEventListener, SchedulerEvent
         for index, segment in enumerate(self._segments):
             start, end, selection = segment
             output.write("%-10d%-10.2f%-10.2f%-10d\n" % (index, start, end, selection))
+        output.write("\n")
+        output.write("Stalls:\n")
+        output.write("%-6s%-6s%-6s\n" % ("Start", "End", "Duration"))
+        buffering_start = None
+        for time, state in self._states:
+            if state == State.BUFFERING:
+                buffering_start = time
+            elif state == State.READY:
+                if buffering_start is not None:
+                    output.write("%-6.2f%-6.2f%-6.2f\n" % (buffering_start, time, time - buffering_start))
+                    buffering_start = None
         if self.config.save_plots_dir is not None:
             self.save_plot()
 
