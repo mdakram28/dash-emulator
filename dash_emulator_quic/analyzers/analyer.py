@@ -60,9 +60,9 @@ class BETAPlaybackAnalyzer(PlaybackAnalyzer, PlayerEventListener, SchedulerEvent
         completion_time = self._seconds_since(self._start_time)
         self._current_segment[2] = completion_time
 
-        index, start_time, _, selection, thoughput = self._current_segment
+        index, start_time, _, selection, throughput = self._current_segment
 
-        self._segments.append((start_time, completion_time, selection, thoughput))
+        self._segments.append((start_time, completion_time, selection, throughput))
         assert len(self._segments) == index + 1
 
     async def on_bandwidth_update(self, bw: int) -> None:
