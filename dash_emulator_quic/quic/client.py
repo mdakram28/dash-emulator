@@ -38,7 +38,7 @@ class QuicClient(DownloadManager, ABC):
         pass
 
     @abstractmethod
-    def drop_url(self, url: str):
+    async def drop_url(self, url: str):
         """
         Drop the URL downloading process
         """
@@ -207,5 +207,7 @@ class QuicClientImpl(QuicClient):
         if self._client is not None:
             self._client.cancel_read(url)
 
-    def drop_url(self, url: str):
-        self.event_parser.drop_stream(url)
+    async def drop_url(self, url: str):
+        if self._client is not None:
+            await self._client.close_stream_of_url(url)
+        await self.event_parser.drop_stream(url)

@@ -247,7 +247,6 @@ class HttpProtocol(QuicConnectionProtocol):
                 yield event
             except asyncio.CancelledError as e:
                 self.log.info(f"Cancel Reading {request.url.url}")
-                self.log.exception(e)
                 return
 
     async def close_stream_of_url(self, url):

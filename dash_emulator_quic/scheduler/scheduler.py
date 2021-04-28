@@ -82,6 +82,7 @@ class BETASchedulerImpl(BETAScheduler):
                 continue
 
             # Download one segment from each adaptation set
+            self.log.error(f"index={self._index}, and dropped_index={self._dropped_index}")
             if self._index == self._dropped_index:
                 selections = self.abr_controller.update_selection(self.adaptation_sets, choose_lowest=True)
             else:
@@ -111,6 +112,7 @@ class BETASchedulerImpl(BETAScheduler):
             results = [await self.download_manager.wait_complete(url) for url in urls]
             if any([result is None for result in results]):
                 # Result is None means the stream got dropped
+                self._dropped_index = self._index
                 continue
             for listener in self.listeners:
                 await listener.on_segment_download_complete(self._index)

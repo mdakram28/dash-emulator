@@ -65,6 +65,9 @@ class BETAManagerImpl(BETAManager, DownloadEventListener, PlayerEventListener, S
         self._timeout = -1
         self._max_timeout = -1
 
+        self._dropped_urls = set()
+        self._dropped_indices = set()
+
     async def on_bytes_transferred(self, length: int, url: str, position: int, size: int) -> None:
         await self._event_queue.put(BytesTransferredEvent(length, url, position, size))
 
@@ -128,12 +131,19 @@ class BETAManagerImpl(BETAManager, DownloadEventListener, PlayerEventListener, S
         First packet comes in.
         If there is a pending segment, cancel that segment request
         """
-        self.log.info(f"Bytes received from {event.url}")
+        self.log.debug(f"Bytes received ({event.position}/{event.size}) {event.url}")
         if self._pending_segment is not None and event.url != self._pending_segment.url:
             self.log.info(f"Cancel pending segment {self._pending_segment.url}")
             self.download_manager.cancel_read_url(self._pending_segment.url)
             self._pending_segment = None
         elif self._pending_segment is not None and self._pending_segment.url == event.url:
+            return
+
+        # If the segment is a dropped url, ignore it
+        if event.url in self._dropped_urls:
+            return
+        # If the index is a dropped index, but the url is different, it means it's the replacing segment, do nothing.
+        if self._current_segment.index in self._dropped_indices:
             return
 
         if self._state != State.READY:
@@ -153,8 +163,6 @@ class BETAManagerImpl(BETAManager, DownloadEventListener, PlayerEventListener, S
             return
 
         ratio = event.position / event.size
-        if ratio < self.MIN_REF_RATIO:
-            return
 
         if ratio > self.vq_threshold_manager.get_threshold(self._current_segment.index):
             await self._stop_download()
@@ -164,11 +172,21 @@ class BETAManagerImpl(BETAManager, DownloadEventListener, PlayerEventListener, S
             await self._stop_download()
             return
 
-        if now > self._max_timeout and ratio > self.MIN_REF_RATIO:
+        if now > self._max_timeout and ratio < self.MIN_REF_RATIO:
+            await self.drop_and_replace()
+            return
+        else:
             await self._stop_download()
             return
 
     async def _stop_download(self):
-        self.log.info(f"BETA: Stop Downloading: {self._current_segment.url}")
+        self.log.debug(f"BETA: Stop Downloading: {self._current_segment.url}")
         await self.download_manager.stop(self._current_segment.url)
         self._pending_segment = self._current_segment
+
+    async def drop_and_replace(self):
+        self.log.error(f"BETA: Drop URL: {self._current_segment.url} and replace with the lowest bitrate")
+        self._dropped_urls.add(self._current_segment.url)
+        self._dropped_indices.add(self._current_segment.index)
+        await self.download_manager.drop_url(self._current_segment.url)
+        self.download_manager.cancel_read_url(self._current_segment.url)
