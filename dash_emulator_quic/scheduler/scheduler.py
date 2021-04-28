@@ -82,7 +82,7 @@ class BETASchedulerImpl(BETAScheduler):
                 continue
 
             # Download one segment from each adaptation set
-            self.log.error(f"index={self._index}, and dropped_index={self._dropped_index}")
+            self.log.info(f"index={self._index}, and dropped_index={self._dropped_index}")
             if self._index == self._dropped_index:
                 selections = self.abr_controller.update_selection(self.adaptation_sets, choose_lowest=True)
             else:

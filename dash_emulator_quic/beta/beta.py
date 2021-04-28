@@ -185,7 +185,7 @@ class BETAManagerImpl(BETAManager, DownloadEventListener, PlayerEventListener, S
         self._pending_segment = self._current_segment
 
     async def drop_and_replace(self):
-        self.log.error(f"BETA: Drop URL: {self._current_segment.url} and replace with the lowest bitrate")
+        self.log.info(f"BETA: Drop URL: {self._current_segment.url} and replace with the lowest bitrate")
         self._dropped_urls.add(self._current_segment.url)
         self._dropped_indices.add(self._current_segment.index)
         await self.download_manager.drop_url(self._current_segment.url)
