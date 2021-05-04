@@ -130,8 +130,12 @@ class H3EventParserImpl(H3EventParser):
         self._partially_accepted_urls.add(url)
         if url in self._waiting_urls:
             self._waiting_urls[url].set()
+        for listener in self.listeners:
+            await listener.on_transfer_end(len(self._contents[url]), url)
 
     async def drop_stream(self, url: str):
         self._canceled_urls.add(url)
         if url in self._waiting_urls:
             self._waiting_urls[url].set()
+        for listener in self.listeners:
+            await listener.on_transfer_canceled(url, len(self._contents[url]), self._content_lengths[url])

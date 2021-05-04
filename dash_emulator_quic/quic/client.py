@@ -103,10 +103,12 @@ class QuicClientImpl(QuicClient):
         return await self.event_parser.wait_complete(url)
 
     async def close(self):
+        # This is to close the whole connection
         if self._close_event is not None:
             self._close_event.set()
 
     async def stop(self, url: str):
+        # This is to stop only one stream
         if self._client is not None:
             await self._client.close_stream_of_url(url)
             await self.event_parser.close_stream(url)
