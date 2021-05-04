@@ -30,7 +30,7 @@ class BETAManagerImpl(BETAManager, DownloadEventListener, PlayerEventListener, S
                       BandwidthUpdateListener):
     log = logging.getLogger("BETAManagerImpl")
 
-    MIN_REF_RATIO = 0.4
+    MIN_REF_RATIO = 0.1
 
     def __init__(self,
                  mpd_provider: MPDProvider,
@@ -146,12 +146,12 @@ class BETAManagerImpl(BETAManager, DownloadEventListener, PlayerEventListener, S
         if self._current_segment.index in self._dropped_indices:
             return
 
-        if self._state != State.READY:
-            return
-
         if self._current_segment.first_bytes_received is False:
             self._current_segment.first_bytes_received = True
-            timeout_value = (event.size - event.length) * 8 / self._bw
+            try:
+                timeout_value = (event.size - event.length) * 8 / self._bw
+            except ZeroDivisionError:
+                timeout_value = 10
             max_timeout_value = timeout_value * 2
             self.log.info(f"BETA: BETA calculate timeout: {timeout_value}, max timeout {max_timeout_value}")
             self._timeout = datetime.datetime.now() + datetime.timedelta(seconds=timeout_value)
@@ -159,21 +159,30 @@ class BETAManagerImpl(BETAManager, DownloadEventListener, PlayerEventListener, S
             return
 
         now = datetime.datetime.now()
+        ratio = event.position / event.size
+
+        if self._current_segment.index != 0 and event.url == self._current_segment.url and self._state == State.BUFFERING and ratio > self.MIN_REF_RATIO:
+            await self._stop_download()
+
         if now < self._timeout:
             return
 
-        ratio = event.position / event.size
-
         if ratio > self.vq_threshold_manager.get_threshold(self._current_segment.index):
+            # await self._stop_download()
             await self._stop_download()
             return
 
         if self._buffer_level < self.panic_buffer_level:
-            await self._stop_download()
+            if ratio < self.MIN_REF_RATIO:
+                # await self.drop_and_replace()
+                await self._stop_download()
+            else:
+                await self._stop_download()
             return
 
         if now > self._max_timeout and ratio < self.MIN_REF_RATIO:
-            await self.drop_and_replace()
+            # await self.drop_and_replace()
+            await self._stop_download()
             return
         else:
             await self._stop_download()
@@ -181,7 +190,8 @@ class BETAManagerImpl(BETAManager, DownloadEventListener, PlayerEventListener, S
 
     async def _stop_download(self):
         self.log.debug(f"BETA: Stop Downloading: {self._current_segment.url}")
-        await self.download_manager.stop(self._current_segment.url)
+        if self._pending_segment is None or self._pending_segment.url != self._current_segment.url:
+            await self.download_manager.stop(self._current_segment.url)
         self._pending_segment = self._current_segment
 
     async def drop_and_replace(self):

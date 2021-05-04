@@ -1,6 +1,6 @@
 from typing import Tuple
 
-from dash_emulator.abr import DashABRController, ABRController
+from dash_emulator.abr import DashABRController
 from dash_emulator.bandwidth import BandwidthMeterImpl
 from dash_emulator.buffer import BufferManager, BufferManagerImpl
 from dash_emulator.config import Config
@@ -8,7 +8,7 @@ from dash_emulator.event_logger import EventLogger
 from dash_emulator.mpd import MPDProvider
 from dash_emulator.mpd.parser import DefaultMPDParser
 from dash_emulator.player import DASHPlayer
-from dash_emulator.scheduler import SchedulerImpl, Scheduler
+from dash_emulator.scheduler import Scheduler
 
 from dash_emulator_quic.abr import ExtendedABRController, BetaABRController
 from dash_emulator_quic.analyzers.analyer import BETAPlaybackAnalyzer, BETAPlaybackAnalyzerConfig, PlaybackAnalyzer
@@ -39,9 +39,9 @@ def build_dash_player_over_quic(beta=False, plot_output=None) -> Tuple[DASHPlaye
         bandwidth_meter = BandwidthMeterImpl(cfg.max_initial_bitrate, cfg.smoothing_factor, [analyzer])
         h3_event_parser = H3EventParserImpl(listeners=[bandwidth_meter])
         download_manager = QuicClientImpl([bandwidth_meter], event_parser=h3_event_parser)
-        abr_controller: ABRController = DashABRController(2, 4, bandwidth_meter, buffer_manager)
-        scheduler: Scheduler = SchedulerImpl(5, cfg.update_interval, download_manager, bandwidth_meter, buffer_manager,
-                                             abr_controller, [event_logger, analyzer])
+        abr_controller = BetaABRController(DashABRController(2, 4, bandwidth_meter, buffer_manager))
+        scheduler: Scheduler = BETASchedulerImpl(5, cfg.update_interval, download_manager, bandwidth_meter,
+                                                 buffer_manager, abr_controller, [event_logger, analyzer])
         return DASHPlayer(cfg.update_interval, min_rebuffer_duration=1, min_start_buffer_duration=2,
                           buffer_manager=buffer_manager, mpd_provider=mpd_provider, scheduler=scheduler,
                           listeners=[event_logger, analyzer]), analyzer
@@ -67,8 +67,8 @@ def build_dash_player_over_quic(beta=False, plot_output=None) -> Tuple[DASHPlaye
         )
 
         scheduler: BETAScheduler = BETASchedulerImpl(5, cfg.update_interval, download_manager, bandwidth_meter,
-                                                     buffer_manager,
-                                                     abr_controller, [event_logger, beta_manager, analyzer])
+                                                     buffer_manager, abr_controller,
+                                                     [event_logger, beta_manager, analyzer])
         return DASHPlayer(cfg.update_interval, min_rebuffer_duration=1, min_start_buffer_duration=2,
                           buffer_manager=buffer_manager, mpd_provider=mpd_provider, scheduler=scheduler,
                           listeners=[event_logger, beta_manager, analyzer], services=[beta_manager]), analyzer
