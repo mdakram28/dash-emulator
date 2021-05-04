@@ -16,7 +16,7 @@ from aioquic.h3.events import (
     HeadersReceived,
     PushPromiseReceived,
 )
-from aioquic.quic.events import QuicEvent, StreamDataReceived
+from aioquic.quic.events import QuicEvent
 
 logger = logging.getLogger("client")
 
@@ -245,7 +245,7 @@ class HttpProtocol(QuicConnectionProtocol):
                     if event.stream_ended:
                         return
                 yield event
-            except asyncio.CancelledError as e:
+            except asyncio.CancelledError:
                 self.log.info(f"Cancel Reading {request.url.url}")
                 return
 

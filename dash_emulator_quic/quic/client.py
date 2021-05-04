@@ -133,9 +133,9 @@ class QuicClientImpl(QuicClient):
 
         async def read_new_request():
             while True:
-                url = await self._download_queue.get()
-                iter = self._download_internal(url)
-                asyncio.create_task(drain(iter))
+                req_url = await self._download_queue.get()
+                it = self._download_internal(req_url)
+                asyncio.create_task(drain(it))
 
         asyncio.create_task(read_new_request())
         while True:

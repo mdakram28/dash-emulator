@@ -1,6 +1,6 @@
 from typing import Tuple
 
-from dash_emulator.abr import DashABRController
+from dash_emulator.abr import DashABRController, ABRController
 from dash_emulator.bandwidth import BandwidthMeterImpl
 from dash_emulator.buffer import BufferManager, BufferManagerImpl
 from dash_emulator.config import Config
@@ -39,7 +39,7 @@ def build_dash_player_over_quic(beta=False, plot_output=None) -> Tuple[DASHPlaye
         bandwidth_meter = BandwidthMeterImpl(cfg.max_initial_bitrate, cfg.smoothing_factor, [analyzer])
         h3_event_parser = H3EventParserImpl(listeners=[bandwidth_meter])
         download_manager = QuicClientImpl([bandwidth_meter], event_parser=h3_event_parser)
-        abr_controller = DashABRController(2, 4, bandwidth_meter, buffer_manager)
+        abr_controller: ABRController = DashABRController(2, 4, bandwidth_meter, buffer_manager)
         scheduler: Scheduler = SchedulerImpl(5, cfg.update_interval, download_manager, bandwidth_meter, buffer_manager,
                                              abr_controller, [event_logger, analyzer])
         return DASHPlayer(cfg.update_interval, min_rebuffer_duration=1, min_start_buffer_duration=2,
