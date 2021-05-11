@@ -33,9 +33,9 @@ def build_dash_player_over_quic(beta=False, plot_output=None) -> Tuple[DASHPlaye
         cfg = Config
         buffer_manager: BufferManager = BufferManagerImpl()
         event_logger = EventLogger()
-        analyzer: BETAPlaybackAnalyzer = BETAPlaybackAnalyzer(BETAPlaybackAnalyzerConfig(save_plots_dir=plot_output))
         mpd_provider: MPDProvider = BETAMPDProviderImpl(DefaultMPDParser(), cfg.update_interval,
                                                         QuicClientImpl([], event_parser=H3EventParserImpl()))
+        analyzer: BETAPlaybackAnalyzer = BETAPlaybackAnalyzer(BETAPlaybackAnalyzerConfig(save_plots_dir=plot_output), mpd_provider)
         bandwidth_meter = BandwidthMeterImpl(cfg.max_initial_bitrate, cfg.smoothing_factor, [analyzer])
         h3_event_parser = H3EventParserImpl(listeners=[bandwidth_meter])
         download_manager = QuicClientImpl([bandwidth_meter], event_parser=h3_event_parser)
@@ -49,9 +49,9 @@ def build_dash_player_over_quic(beta=False, plot_output=None) -> Tuple[DASHPlaye
         cfg = Config
         buffer_manager: BufferManager = BufferManagerImpl()
         event_logger = EventLogger()
-        analyzer: BETAPlaybackAnalyzer = BETAPlaybackAnalyzer(BETAPlaybackAnalyzerConfig(save_plots_dir=plot_output))
         mpd_provider: MPDProvider = BETAMPDProviderImpl(DefaultMPDParser(), cfg.update_interval,
                                                         QuicClientImpl([], H3EventParserImpl()))
+        analyzer: BETAPlaybackAnalyzer = BETAPlaybackAnalyzer(BETAPlaybackAnalyzerConfig(save_plots_dir=plot_output), mpd_provider)
         bandwidth_meter = BandwidthMeterImpl(cfg.max_initial_bitrate, cfg.smoothing_factor, [analyzer])
         h3_event_parser = H3EventParserImpl([bandwidth_meter])
         download_manager = QuicClientImpl([bandwidth_meter], h3_event_parser)

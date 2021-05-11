@@ -8,6 +8,7 @@ from typing import List, Tuple, Union, TextIO
 import matplotlib.pyplot as plt
 from dash_emulator.bandwidth import BandwidthUpdateListener
 from dash_emulator.models import State
+from dash_emulator.mpd import MPDProvider
 from dash_emulator.player import PlayerEventListener
 from dash_emulator.scheduler import SchedulerEventListener
 
@@ -29,19 +30,34 @@ class BETAPlaybackAnalyzer(PlaybackAnalyzer, PlayerEventListener, SchedulerEvent
                            BandwidthUpdateListener):
     log = logging.getLogger("BETAPlaybackAnalyzer")
 
-    def __init__(self, config: BETAPlaybackAnalyzerConfig):
+    def __init__(self, config: BETAPlaybackAnalyzerConfig, mpd_provider: MPDProvider):
         self.config = config
+        self._mpd_provider = mpd_provider
         self._start_time = datetime.datetime.now().timestamp()
         self._buffer_levels: List[Tuple[float, float]] = []
         self._throughputs: List[Tuple[float, int]] = []
         self._states: List[Tuple[float, State]] = []
         self._segments: List[
             Tuple[float, float, int, int]] = []  # start time, completion time, quality selection, bandwidth
-        self._current_segment: List[Union[int, float]] = [0, 0, 0, 0,
-                                                          0]  # index, start time, completion time, quality, bandwidth
+
+        # index, start time, completion time, quality, bandwidth
+        self._current_segment: List[Union[int, float]] = [0, 0, 0, 0, 0]
 
     @staticmethod
     def _seconds_since(start_time: float):
+        """
+        Calculate the seconds since a given time
+
+        Parameters
+        ----------
+        start_time:
+            The start time in seconds
+
+        Returns
+        -------
+        The seconds sice given start_time
+
+        """
         return datetime.datetime.now().timestamp() - start_time
 
     async def on_state_change(self, position: float, old_state: State, new_state: State):
@@ -52,7 +68,8 @@ class BETAPlaybackAnalyzer(PlaybackAnalyzer, PlayerEventListener, SchedulerEvent
 
     async def on_segment_download_start(self, index, selections):
         if len(self._throughputs) != 0:
-            self._current_segment = [index, self._seconds_since(self._start_time), None, selections[0], self._throughputs[-1][1]]
+            self._current_segment = [index, self._seconds_since(self._start_time), None, selections[0],
+                                     self._throughputs[-1][1]]
         else:
             self._current_segment = [index, self._seconds_since(self._start_time), None, selections[0], 0]
 
@@ -68,12 +85,48 @@ class BETAPlaybackAnalyzer(PlaybackAnalyzer, PlayerEventListener, SchedulerEvent
     async def on_bandwidth_update(self, bw: int) -> None:
         self._throughputs.append((self._seconds_since(self._start_time), bw))
 
+    def _get_video_bitrate(self, representation_id):
+        """
+        Get the video bitrate of given representation id
+
+        Parameters
+        ----------
+        representation_id:
+            The representation ID of the info
+
+        Returns
+        -------
+        The video bitrate of given representation id
+
+        """
+        mpd = self._mpd_provider.mpd
+        adaptation_set = None
+
+        if len(mpd.adaptation_sets) != 1:
+            return 0
+
+        for adaptation_set_id, adaptation_set_obj in mpd.adaptation_sets.items():
+            if adaptation_set_obj.content_type == 'video':
+                adaptation_set = adaptation_set_obj
+                break
+
+        if adaptation_set is None:
+            return 0
+
+        representation = adaptation_set.representations[representation_id]
+        return representation.bandwidth if representation is not None else 0
+
     def save(self, output: io.TextIOBase) -> None:
-        output.write("%-10s%-10s%-10s%-10s%-10s\n" % ('Index', 'Start', 'End', 'Quality', 'Throughput'))
+        bitrates = []
+        output.write("%-10s%-10s%-10s%-10s%-10s%-10s\n" % ('Index', 'Start', 'End', 'Quality', 'Bitrate', 'Throughput'))
         for index, segment in enumerate(self._segments):
             start, end, selection, throughput = segment
-            output.write("%-10d%-10.2f%-10.2f%-10d%-10d\n" % (index, start, end, selection, throughput))
+            bitrate = self._get_video_bitrate(selection)
+            bitrates.append(bitrate)
+            output.write("%-10d%-10.2f%-10.2f%-10d%-10d%-10d\n" % (index, start, end, selection, bitrate, throughput))
         output.write("\n")
+
+        # Stalls
         output.write("Stalls:\n")
         output.write("%-6s%-6s%-6s\n" % ("Start", "End", "Duration"))
         buffering_start = None
@@ -84,6 +137,12 @@ class BETAPlaybackAnalyzer(PlaybackAnalyzer, PlayerEventListener, SchedulerEvent
                 if buffering_start is not None:
                     output.write("%-6.2f%-6.2f%-6.2f\n" % (buffering_start, time, time - buffering_start))
                     buffering_start = None
+
+        # Average bitrate
+        output.write('\n')
+        average_bitrate = sum(bitrates) / len(bitrates)
+        output.write(f"Average bitrate: {average_bitrate:.2f} bps\n")
+
         if self.config.save_plots_dir is not None:
             self.save_plot()
 
