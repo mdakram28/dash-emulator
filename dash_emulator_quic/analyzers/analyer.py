@@ -118,9 +118,20 @@ class BETAPlaybackAnalyzer(PlaybackAnalyzer, PlayerEventListener, SchedulerEvent
 
     def save(self, output: io.TextIOBase) -> None:
         bitrates = []
+
+        last_quality = None
+        quality_switches = 0
+
         output.write("%-10s%-10s%-10s%-10s%-10s%-10s\n" % ('Index', 'Start', 'End', 'Quality', 'Bitrate', 'Throughput'))
         for index, segment in enumerate(self._segments):
             start, end, selection, throughput = segment
+            if last_quality is None:
+                # First segment
+                last_quality = selection
+            else:
+                if last_quality != selection:
+                    last_quality = selection
+                    quality_switches += 1
             bitrate = self._get_video_bitrate(selection)
             bitrates.append(bitrate)
             output.write("%-10d%-10.2f%-10.2f%-10d%-10d%-10d\n" % (index, start, end, selection, bitrate, throughput))
@@ -142,6 +153,10 @@ class BETAPlaybackAnalyzer(PlaybackAnalyzer, PlayerEventListener, SchedulerEvent
         output.write('\n')
         average_bitrate = sum(bitrates) / len(bitrates)
         output.write(f"Average bitrate: {average_bitrate:.2f} bps\n")
+
+        # Number of quality switches
+        output.write('\n')
+        output.write(f"Number of quality switches: {quality_switches}\n")
 
         if self.config.save_plots_dir is not None:
             self.save_plot()
