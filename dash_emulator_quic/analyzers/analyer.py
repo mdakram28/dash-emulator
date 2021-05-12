@@ -85,21 +85,19 @@ class BETAPlaybackAnalyzer(PlaybackAnalyzer, PlayerEventListener, SchedulerEvent
         self._buffer_levels.append((self._seconds_since(self._start_time), buffer_level))
 
     async def on_bytes_transferred(self, length: int, url: str, position: int, size: int) -> None:
-        self.log.info("on_bytes_transferred")
         segment = self._segments_by_url[url]
         segment.size = size
         segment.position = position
 
     async def on_transfer_end(self, size: int, url: str) -> None:
-        self.log.info("on_transfer_end")
+        pass
 
     async def on_transfer_start(self, url) -> None:
-        self.log.info("on_transfer_start")
         self._current_segment.url = url
         self._segments_by_url[url] = self._current_segment
 
     async def on_transfer_canceled(self, url: str, position: int, size: int) -> None:
-        self.log.info("on_transfer_canceled")
+        pass
 
     async def on_segment_download_start(self, index, selections):
         throughput = self._throughputs[-1][1] if len(self._throughputs) != 0 else 0
