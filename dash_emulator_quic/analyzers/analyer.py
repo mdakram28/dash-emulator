@@ -3,10 +3,11 @@ import io
 import logging
 import os
 from abc import ABC, abstractmethod
-from typing import List, Tuple, Union, TextIO
+from typing import List, Tuple, TextIO, Optional
 
 import matplotlib.pyplot as plt
 from dash_emulator.bandwidth import BandwidthUpdateListener
+from dash_emulator.download import DownloadEventListener
 from dash_emulator.models import State
 from dash_emulator.mpd import MPDProvider
 from dash_emulator.player import PlayerEventListener
@@ -26,7 +27,24 @@ class BETAPlaybackAnalyzerConfig:
         self.save_plots_dir = save_plots_dir
 
 
-class BETAPlaybackAnalyzer(PlaybackAnalyzer, PlayerEventListener, SchedulerEventListener,
+class AnalyzerSegment:
+    def __init__(self, index, start_time, completion_time, quality_selection, bandwidth):
+        self.index = index
+        self.start_time = start_time
+        self.completion_time = completion_time
+        self.quality_selection = quality_selection
+        self.bandwidth = bandwidth
+
+        self.position = 0
+        self.size = 0
+        self.url = ""
+
+    @property
+    def ratio(self):
+        return self.position / self.size
+
+
+class BETAPlaybackAnalyzer(PlaybackAnalyzer, PlayerEventListener, SchedulerEventListener, DownloadEventListener,
                            BandwidthUpdateListener):
     log = logging.getLogger("BETAPlaybackAnalyzer")
 
@@ -37,11 +55,10 @@ class BETAPlaybackAnalyzer(PlaybackAnalyzer, PlayerEventListener, SchedulerEvent
         self._buffer_levels: List[Tuple[float, float]] = []
         self._throughputs: List[Tuple[float, int]] = []
         self._states: List[Tuple[float, State]] = []
-        self._segments: List[
-            Tuple[float, float, int, int]] = []  # start time, completion time, quality selection, bandwidth
+        self._segments: List[AnalyzerSegment] = []  # start time, completion time, quality selection, bandwidth
 
         # index, start time, completion time, quality, bandwidth
-        self._current_segment: List[Union[int, float]] = [0, 0, 0, 0, 0]
+        self._current_segment: Optional[AnalyzerSegment] = None
 
     @staticmethod
     def _seconds_since(start_time: float):
@@ -66,28 +83,36 @@ class BETAPlaybackAnalyzer(PlaybackAnalyzer, PlayerEventListener, SchedulerEvent
     async def on_buffer_level_change(self, buffer_level):
         self._buffer_levels.append((self._seconds_since(self._start_time), buffer_level))
 
+    async def on_bytes_transferred(self, length: int, url: str, position: int, size: int) -> None:
+        self.log.info("on_bytes_transferred")
+
+    async def on_transfer_end(self, size: int, url: str) -> None:
+        self.log.info("on_transfer_end")
+
+    async def on_transfer_start(self, url) -> None:
+        self.log.info("on_transfer_start")
+
+    async def on_transfer_canceled(self, url: str, position: int, size: int) -> None:
+        self.log.info("on_transfer_canceled")
+
     async def on_segment_download_start(self, index, selections):
-        if len(self._throughputs) != 0:
-            self._current_segment = [index, self._seconds_since(self._start_time), None, selections[0],
-                                     self._throughputs[-1][1]]
-        else:
-            self._current_segment = [index, self._seconds_since(self._start_time), None, selections[0], 0]
+        throughput = self._throughputs[-1][1] if len(self._throughputs) != 0 else 0
+        self._current_segment = AnalyzerSegment(index, self._seconds_since(self._start_time), None, selections[0],
+                                                throughput)
 
     async def on_segment_download_complete(self, index):
         completion_time = self._seconds_since(self._start_time)
-        self._current_segment[2] = completion_time
+        self._current_segment.completion_time = completion_time
 
-        index, start_time, _, selection, throughput = self._current_segment
-
-        self._segments.append((start_time, completion_time, selection, throughput))
+        self._segments.append(self._current_segment)
         assert len(self._segments) == index + 1
 
     async def on_bandwidth_update(self, bw: int) -> None:
         self._throughputs.append((self._seconds_since(self._start_time), bw))
 
-    def _get_video_bitrate(self, representation_id):
+    def _get_video_representation(self, representation_id):
         """
-        Get the video bitrate of given representation id
+        Get the video representation of given representation id
 
         Parameters
         ----------
@@ -103,7 +128,7 @@ class BETAPlaybackAnalyzer(PlaybackAnalyzer, PlayerEventListener, SchedulerEvent
         adaptation_set = None
 
         if len(mpd.adaptation_sets) != 1:
-            return 0
+            return None
 
         for adaptation_set_id, adaptation_set_obj in mpd.adaptation_sets.items():
             if adaptation_set_obj.content_type == 'video':
@@ -111,10 +136,10 @@ class BETAPlaybackAnalyzer(PlaybackAnalyzer, PlayerEventListener, SchedulerEvent
                 break
 
         if adaptation_set is None:
-            return 0
+            return None
 
         representation = adaptation_set.representations[representation_id]
-        return representation.bandwidth if representation is not None else 0
+        return representation
 
     def save(self, output: io.TextIOBase) -> None:
         bitrates = []
@@ -124,17 +149,18 @@ class BETAPlaybackAnalyzer(PlaybackAnalyzer, PlayerEventListener, SchedulerEvent
 
         output.write("%-10s%-10s%-10s%-10s%-10s%-10s\n" % ('Index', 'Start', 'End', 'Quality', 'Bitrate', 'Throughput'))
         for index, segment in enumerate(self._segments):
-            start, end, selection, throughput = segment
             if last_quality is None:
                 # First segment
-                last_quality = selection
+                last_quality = segment.quality_selection
             else:
-                if last_quality != selection:
-                    last_quality = selection
+                if last_quality != segment.quality_selection:
+                    last_quality = segment.quality_selection
                     quality_switches += 1
-            bitrate = self._get_video_bitrate(selection)
+            representation = self._get_video_representation(segment.quality_selection)
+            bitrate = representation.bandwidth
             bitrates.append(bitrate)
-            output.write("%-10d%-10.2f%-10.2f%-10d%-10d%-10d\n" % (index, start, end, selection, bitrate, throughput))
+            output.write("%-10d%-10.2f%-10.2f%-10d%-10d%-10d\n" % (
+            index, segment.start_time, segment.completion_time, segment.quality_selection, bitrate, segment.bandwidth))
         output.write("\n")
 
         # Stalls

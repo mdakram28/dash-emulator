@@ -35,10 +35,11 @@ def build_dash_player_over_quic(beta=False, plot_output=None) -> Tuple[DASHPlaye
         event_logger = EventLogger()
         mpd_provider: MPDProvider = BETAMPDProviderImpl(DefaultMPDParser(), cfg.update_interval,
                                                         QuicClientImpl([], event_parser=H3EventParserImpl()))
-        analyzer: BETAPlaybackAnalyzer = BETAPlaybackAnalyzer(BETAPlaybackAnalyzerConfig(save_plots_dir=plot_output), mpd_provider)
+        analyzer: BETAPlaybackAnalyzer = BETAPlaybackAnalyzer(BETAPlaybackAnalyzerConfig(save_plots_dir=plot_output),
+                                                              mpd_provider)
         bandwidth_meter = BandwidthMeterImpl(cfg.max_initial_bitrate, cfg.smoothing_factor, [analyzer])
-        h3_event_parser = H3EventParserImpl(listeners=[bandwidth_meter])
-        download_manager = QuicClientImpl([bandwidth_meter], event_parser=h3_event_parser)
+        h3_event_parser = H3EventParserImpl(listeners=[bandwidth_meter, analyzer])
+        download_manager = QuicClientImpl([bandwidth_meter, analyzer], event_parser=h3_event_parser)
         abr_controller = BetaABRController(DashABRController(2, 4, bandwidth_meter, buffer_manager))
         scheduler: Scheduler = BETASchedulerImpl(5, cfg.update_interval, download_manager, bandwidth_meter,
                                                  buffer_manager, abr_controller, [event_logger, analyzer])
@@ -51,10 +52,11 @@ def build_dash_player_over_quic(beta=False, plot_output=None) -> Tuple[DASHPlaye
         event_logger = EventLogger()
         mpd_provider: MPDProvider = BETAMPDProviderImpl(DefaultMPDParser(), cfg.update_interval,
                                                         QuicClientImpl([], H3EventParserImpl()))
-        analyzer: BETAPlaybackAnalyzer = BETAPlaybackAnalyzer(BETAPlaybackAnalyzerConfig(save_plots_dir=plot_output), mpd_provider)
+        analyzer: BETAPlaybackAnalyzer = BETAPlaybackAnalyzer(BETAPlaybackAnalyzerConfig(save_plots_dir=plot_output),
+                                                              mpd_provider)
         bandwidth_meter = BandwidthMeterImpl(cfg.max_initial_bitrate, cfg.smoothing_factor, [analyzer])
-        h3_event_parser = H3EventParserImpl([bandwidth_meter])
-        download_manager = QuicClientImpl([bandwidth_meter], h3_event_parser)
+        h3_event_parser = H3EventParserImpl([bandwidth_meter, analyzer])
+        download_manager = QuicClientImpl([bandwidth_meter, analyzer], h3_event_parser)
 
         vq_threshold_manager = MockVQThresholdManager()
         beta_manager = BETAManagerImpl(mpd_provider, download_manager, vq_threshold_manager, panic_buffer_level=2.5)

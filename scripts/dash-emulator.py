@@ -60,7 +60,7 @@ if __name__ == '__main__':
     except AssertionError:
         print("Python 3.3+ is required.")
         exit(-1)
-    logging.basicConfig(level=logging.INFO, format='%(asctime)s %(name)20s %(levelname)8s:%(message)s')
+    logging.basicConfig(level=logging.DEBUG, format='%(asctime)s %(name)20s %(levelname)8s:%(message)s')
     parser = create_parser()
     args = parser.parse_args()
 
