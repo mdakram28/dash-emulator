@@ -3,7 +3,7 @@ import io
 import logging
 import os
 from abc import ABC, abstractmethod
-from typing import List, Tuple, TextIO, Optional
+from typing import List, Tuple, TextIO, Optional, Dict
 
 import matplotlib.pyplot as plt
 from dash_emulator.bandwidth import BandwidthUpdateListener
@@ -56,6 +56,7 @@ class BETAPlaybackAnalyzer(PlaybackAnalyzer, PlayerEventListener, SchedulerEvent
         self._throughputs: List[Tuple[float, int]] = []
         self._states: List[Tuple[float, State]] = []
         self._segments: List[AnalyzerSegment] = []  # start time, completion time, quality selection, bandwidth
+        self._segments_by_url: Dict[str, AnalyzerSegment] = {}
 
         # index, start time, completion time, quality, bandwidth
         self._current_segment: Optional[AnalyzerSegment] = None
@@ -85,12 +86,17 @@ class BETAPlaybackAnalyzer(PlaybackAnalyzer, PlayerEventListener, SchedulerEvent
 
     async def on_bytes_transferred(self, length: int, url: str, position: int, size: int) -> None:
         self.log.info("on_bytes_transferred")
+        segment = self._segments_by_url[url]
+        segment.size = size
+        segment.position = position
 
     async def on_transfer_end(self, size: int, url: str) -> None:
         self.log.info("on_transfer_end")
 
     async def on_transfer_start(self, url) -> None:
         self.log.info("on_transfer_start")
+        self._current_segment.url = url
+        self._segments_by_url[url] = self._current_segment
 
     async def on_transfer_canceled(self, url: str, position: int, size: int) -> None:
         self.log.info("on_transfer_canceled")
@@ -147,7 +153,11 @@ class BETAPlaybackAnalyzer(PlaybackAnalyzer, PlayerEventListener, SchedulerEvent
         last_quality = None
         quality_switches = 0
 
-        output.write("%-10s%-10s%-10s%-10s%-10s%-10s\n" % ('Index', 'Start', 'End', 'Quality', 'Bitrate', 'Throughput'))
+        total_stall_duration = 0
+        total_stall_num = 0
+
+        output.write("%-10s%-10s%-10s%-10s%-10s%-10s%-10s%-20s\n" % (
+            'Index', 'Start', 'End', 'Quality', 'Bitrate', 'Throughput', 'Ratio', 'URL'))
         for index, segment in enumerate(self._segments):
             if last_quality is None:
                 # First segment
@@ -159,8 +169,9 @@ class BETAPlaybackAnalyzer(PlaybackAnalyzer, PlayerEventListener, SchedulerEvent
             representation = self._get_video_representation(segment.quality_selection)
             bitrate = representation.bandwidth
             bitrates.append(bitrate)
-            output.write("%-10d%-10.2f%-10.2f%-10d%-10d%-10d\n" % (
-            index, segment.start_time, segment.completion_time, segment.quality_selection, bitrate, segment.bandwidth))
+            output.write("%-10d%-10.2f%-10.2f%-10d%-10d%-10d%-10.2f%-20s\n" % (
+                index, segment.start_time, segment.completion_time, segment.quality_selection, bitrate,
+                segment.bandwidth, segment.ratio, segment.url))
         output.write("\n")
 
         # Stalls
@@ -172,16 +183,22 @@ class BETAPlaybackAnalyzer(PlaybackAnalyzer, PlayerEventListener, SchedulerEvent
                 buffering_start = time
             elif state == State.READY:
                 if buffering_start is not None:
-                    output.write("%-6.2f%-6.2f%-6.2f\n" % (buffering_start, time, time - buffering_start))
+                    duration = time - buffering_start
+                    output.write("%-6.2f%-6.2f%-6.2f\n" % (buffering_start, time, duration))
+                    total_stall_num += 1
+                    total_stall_duration += duration
                     buffering_start = None
 
-        # Average bitrate
         output.write('\n')
+        # Stall summary
+        output.write(f"Number of Stalls: {total_stall_num}\n")
+        output.write(f"Total seconds of stalls: {total_stall_duration}\n")
+
+        # Average bitrate
         average_bitrate = sum(bitrates) / len(bitrates)
         output.write(f"Average bitrate: {average_bitrate:.2f} bps\n")
 
         # Number of quality switches
-        output.write('\n')
         output.write(f"Number of quality switches: {quality_switches}\n")
 
         if self.config.save_plots_dir is not None:
