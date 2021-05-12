@@ -20,7 +20,7 @@ from dash_emulator_quic.quic.event_parser import H3EventParserImpl
 from dash_emulator_quic.scheduler.scheduler import BETAScheduler, BETASchedulerImpl
 
 
-def build_dash_player_over_quic(beta=False, plot_output=None) -> Tuple[DASHPlayer, PlaybackAnalyzer]:
+def build_dash_player_over_quic(beta=False, plot_output=None, dump_results=None) -> Tuple[DASHPlayer, PlaybackAnalyzer]:
     """
     Build a MPEG-DASH Player over QUIC network
 
@@ -35,8 +35,10 @@ def build_dash_player_over_quic(beta=False, plot_output=None) -> Tuple[DASHPlaye
         event_logger = EventLogger()
         mpd_provider: MPDProvider = BETAMPDProviderImpl(DefaultMPDParser(), cfg.update_interval,
                                                         QuicClientImpl([], event_parser=H3EventParserImpl()))
-        analyzer: BETAPlaybackAnalyzer = BETAPlaybackAnalyzer(BETAPlaybackAnalyzerConfig(save_plots_dir=plot_output),
-                                                              mpd_provider)
+        analyzer: BETAPlaybackAnalyzer = BETAPlaybackAnalyzer(
+            BETAPlaybackAnalyzerConfig(save_plots_dir=plot_output, dump_results_path=dump_results),
+            mpd_provider
+        )
         bandwidth_meter = BandwidthMeterImpl(cfg.max_initial_bitrate, cfg.smoothing_factor, [analyzer])
         h3_event_parser = H3EventParserImpl(listeners=[bandwidth_meter, analyzer])
         download_manager = QuicClientImpl([bandwidth_meter, analyzer], event_parser=h3_event_parser)
@@ -52,8 +54,9 @@ def build_dash_player_over_quic(beta=False, plot_output=None) -> Tuple[DASHPlaye
         event_logger = EventLogger()
         mpd_provider: MPDProvider = BETAMPDProviderImpl(DefaultMPDParser(), cfg.update_interval,
                                                         QuicClientImpl([], H3EventParserImpl()))
-        analyzer: BETAPlaybackAnalyzer = BETAPlaybackAnalyzer(BETAPlaybackAnalyzerConfig(save_plots_dir=plot_output),
-                                                              mpd_provider)
+        analyzer: BETAPlaybackAnalyzer = BETAPlaybackAnalyzer(
+            BETAPlaybackAnalyzerConfig(save_plots_dir=plot_output, dump_results_path=dump_results),
+            mpd_provider)
         bandwidth_meter = BandwidthMeterImpl(cfg.max_initial_bitrate, cfg.smoothing_factor, [analyzer])
         h3_event_parser = H3EventParserImpl([bandwidth_meter, analyzer])
         download_manager = QuicClientImpl([bandwidth_meter, analyzer], h3_event_parser)

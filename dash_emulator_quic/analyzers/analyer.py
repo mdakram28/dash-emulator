@@ -1,5 +1,6 @@
 import datetime
 import io
+import json
 import logging
 import os
 from abc import ABC, abstractmethod
@@ -23,8 +24,9 @@ class PlaybackAnalyzer(ABC):
 
 
 class BETAPlaybackAnalyzerConfig:
-    def __init__(self, save_plots_dir=None):
+    def __init__(self, save_plots_dir=None, dump_results_path=None):
         self.save_plots_dir = save_plots_dir
+        self.dump_results_path = dump_results_path
 
 
 class AnalyzerSegment:
@@ -37,6 +39,7 @@ class AnalyzerSegment:
 
         self.position = 0
         self.size = 0
+        self.segment_bitrate = 0
         self.url = ""
 
     @property
@@ -146,6 +149,7 @@ class BETAPlaybackAnalyzer(PlaybackAnalyzer, PlayerEventListener, SchedulerEvent
         return representation
 
     def save(self, output: io.TextIOBase) -> None:
+        print(self.config)
         bitrates = []
 
         last_quality = None
@@ -154,8 +158,8 @@ class BETAPlaybackAnalyzer(PlaybackAnalyzer, PlayerEventListener, SchedulerEvent
         total_stall_duration = 0
         total_stall_num = 0
 
-        output.write("%-10s%-10s%-10s%-10s%-10s%-10s%-10s%-20s\n" % (
-            'Index', 'Start', 'End', 'Quality', 'Bitrate', 'Throughput', 'Ratio', 'URL'))
+        headers = ('Index', 'Start', 'End', 'Quality', 'Bitrate', 'Throughput', 'Ratio', 'URL')
+        output.write("%-10s%-10s%-10s%-10s%-10s%-10s%-10s%-20s\n" % headers)
         for index, segment in enumerate(self._segments):
             if last_quality is None:
                 # First segment
@@ -166,6 +170,7 @@ class BETAPlaybackAnalyzer(PlaybackAnalyzer, PlayerEventListener, SchedulerEvent
                     quality_switches += 1
             representation = self._get_video_representation(segment.quality_selection)
             bitrate = representation.bandwidth
+            segment.segment_bitrate = bitrate
             bitrates.append(bitrate)
             output.write("%-10d%-10.2f%-10.2f%-10d%-10d%-10d%-10.2f%-20s\n" % (
                 index, segment.start_time, segment.completion_time, segment.quality_selection, bitrate,
@@ -201,6 +206,43 @@ class BETAPlaybackAnalyzer(PlaybackAnalyzer, PlayerEventListener, SchedulerEvent
 
         if self.config.save_plots_dir is not None:
             self.save_plot()
+
+        if self.config.dump_results_path is not None:
+            self.dump_results(self.config.dump_results_path, self._segments, total_stall_num, total_stall_duration,
+                              average_bitrate, quality_switches)
+
+    @staticmethod
+    def dump_results(path, segments: List[AnalyzerSegment], num_stall, dur_stall, avg_bitrate,
+                     num_quality_switches):
+        data = {
+            "segments": []
+        }
+        for segment in segments:
+            data_obj = {
+                'index': segment.index,
+                'start': segment.start_time,
+                'end': segment.completion_time,
+                'quality': segment.quality_selection,
+                'bitrate': segment.segment_bitrate,
+                'throughput': segment.bandwidth,
+                'ratio': segment.ratio,
+                'url': segment.url
+            }
+            data['segments'].append(data_obj)
+
+        data['num_stall'] = num_stall
+        data['dur_stall'] = dur_stall
+        data['avg_bitrate'] = avg_bitrate
+        data['num_quality_switches'] = num_quality_switches
+
+        extra_index = 1
+        final_path = f"{path}-{extra_index}.json"
+        while os.path.exists(final_path):
+            extra_index += 1
+            final_path = f"{path}-{extra_index}.json"
+
+        with open(final_path, 'w') as f:
+            f.write(json.dumps(data))
 
     def save_plot(self):
         def plot_bws(ax: plt.Axes):

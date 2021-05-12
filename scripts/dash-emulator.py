@@ -24,6 +24,7 @@ def create_parser():
     arg_parser.add_argument("--beta", action="store_true", help="Enable BETA")
     arg_parser.add_argument("--proxy", type=str, help='NOT IMPLEMENTED YET')
     arg_parser.add_argument("--plot", required=False, default=None, type=str, help="The folder to save plots")
+    arg_parser.add_argument("--dump-results", required=False, default=None, type=str, help="Dump the results")
     arg_parser.add_argument("-y", required=False, default=False, action='store_true',
                             help="Automatically overwrite output folder")
     arg_parser.add_argument(PLAYER_TARGET, type=str, help="Target MPD file link")
@@ -76,7 +77,7 @@ if __name__ == '__main__':
 
 
     async def main():
-        player, analyzer = build_dash_player_over_quic(beta=args["beta"], plot_output=args["plot"])
+        player, analyzer = build_dash_player_over_quic(beta=args["beta"], plot_output=args["plot"], dump_results=args['dump_results'])
         # player = build_dash_player()
 
         await player.start(args["target"])

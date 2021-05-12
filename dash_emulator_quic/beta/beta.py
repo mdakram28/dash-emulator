@@ -163,6 +163,11 @@ class BETAManagerImpl(BETAManager, DownloadEventListener, PlayerEventListener, S
 
         if self._current_segment.index != 0 and event.url == self._current_segment.url and self._state == State.BUFFERING and ratio > self.MIN_REF_RATIO:
             await self._stop_download()
+            return
+
+        if ratio > self.MIN_REF_RATIO and self._buffer_level < self.panic_buffer_level:
+            await self._stop_download()
+            return
 
         if now < self._timeout:
             return
