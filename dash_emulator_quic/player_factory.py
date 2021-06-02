@@ -29,6 +29,12 @@ def build_dash_player_over_quic(beta=False, plot_output=None, dump_results=None)
     player: Player
         A MPEG-DASH Player
     """
+    BUFFER_DURATION = 8
+    SAFE_BUFFER_LEVEL = 6
+    PANIC_BUFFER_LEVEL = 2.5
+    MIN_REBUFFER_DURATION = 2
+    MIN_START_DURATION = 2
+
     if not beta:
         cfg = Config
         buffer_manager: BufferManager = BufferManagerImpl()
@@ -42,10 +48,13 @@ def build_dash_player_over_quic(beta=False, plot_output=None, dump_results=None)
         bandwidth_meter = BandwidthMeterImpl(cfg.max_initial_bitrate, cfg.smoothing_factor, [analyzer])
         h3_event_parser = H3EventParserImpl(listeners=[bandwidth_meter, analyzer])
         download_manager = QuicClientImpl([bandwidth_meter, analyzer], event_parser=h3_event_parser)
-        abr_controller = BetaABRController(DashABRController(2, 4, bandwidth_meter, buffer_manager))
-        scheduler: Scheduler = BETASchedulerImpl(5, cfg.update_interval, download_manager, bandwidth_meter,
+        abr_controller = BetaABRController(
+            DashABRController(PANIC_BUFFER_LEVEL, SAFE_BUFFER_LEVEL, bandwidth_meter, buffer_manager))
+        scheduler: Scheduler = BETASchedulerImpl(BUFFER_DURATION, cfg.update_interval, download_manager,
+                                                 bandwidth_meter,
                                                  buffer_manager, abr_controller, [event_logger, analyzer])
-        return DASHPlayer(cfg.update_interval, min_rebuffer_duration=1, min_start_buffer_duration=2,
+        return DASHPlayer(cfg.update_interval, min_rebuffer_duration=MIN_REBUFFER_DURATION,
+                          min_start_buffer_duration=MIN_START_DURATION,
                           buffer_manager=buffer_manager, mpd_provider=mpd_provider, scheduler=scheduler,
                           listeners=[event_logger, analyzer]), analyzer
     else:
@@ -62,18 +71,20 @@ def build_dash_player_over_quic(beta=False, plot_output=None, dump_results=None)
         download_manager = QuicClientImpl([bandwidth_meter, analyzer], h3_event_parser)
 
         vq_threshold_manager = MockVQThresholdManager()
-        beta_manager = BETAManagerImpl(mpd_provider, download_manager, vq_threshold_manager, panic_buffer_level=2.5)
+        beta_manager = BETAManagerImpl(mpd_provider, download_manager, vq_threshold_manager, panic_buffer_level=PANIC_BUFFER_LEVEL, safe_buffer_level=SAFE_BUFFER_LEVEL)
         download_manager.add_listener(beta_manager)
         bandwidth_meter.add_listener(beta_manager)
         h3_event_parser.add_listener(beta_manager)
 
         abr_controller: ExtendedABRController = BetaABRController(
-            DashABRController(2, 4, bandwidth_meter, buffer_manager)
+            DashABRController(PANIC_BUFFER_LEVEL, SAFE_BUFFER_LEVEL, bandwidth_meter, buffer_manager)
         )
 
-        scheduler: BETAScheduler = BETASchedulerImpl(5, cfg.update_interval, download_manager, bandwidth_meter,
+        scheduler: BETAScheduler = BETASchedulerImpl(BUFFER_DURATION, cfg.update_interval, download_manager,
+                                                     bandwidth_meter,
                                                      buffer_manager, abr_controller,
                                                      [event_logger, beta_manager, analyzer])
-        return DASHPlayer(cfg.update_interval, min_rebuffer_duration=1, min_start_buffer_duration=2,
+        return DASHPlayer(cfg.update_interval, min_rebuffer_duration=MIN_REBUFFER_DURATION,
+                          min_start_buffer_duration=MIN_START_DURATION,
                           buffer_manager=buffer_manager, mpd_provider=mpd_provider, scheduler=scheduler,
                           listeners=[event_logger, beta_manager, analyzer], services=[beta_manager]), analyzer

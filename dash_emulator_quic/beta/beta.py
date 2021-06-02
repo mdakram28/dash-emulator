@@ -36,7 +36,8 @@ class BETAManagerImpl(BETAManager, DownloadEventListener, PlayerEventListener, S
                  mpd_provider: MPDProvider,
                  download_manager: QuicClient,
                  vq_threshold_manager: VQThresholdManager,
-                 panic_buffer_level: float):
+                 panic_buffer_level: float,
+                 safe_buffer_level: float):
         """
         The constructor will create a asyncio.Queue.
         Be sure to create this instance inside an event loop.
@@ -52,6 +53,7 @@ class BETAManagerImpl(BETAManager, DownloadEventListener, PlayerEventListener, S
         self.download_manager = download_manager
         self.vq_threshold_manager = vq_threshold_manager
         self.panic_buffer_level = panic_buffer_level
+        self.safe_buffer_level = safe_buffer_level
 
         self._event_queue: asyncio.Queue[BETAEvent] = asyncio.Queue()
 
@@ -137,6 +139,9 @@ class BETAManagerImpl(BETAManager, DownloadEventListener, PlayerEventListener, S
             self.download_manager.cancel_read_url(self._pending_segment.url)
             self._pending_segment = None
         elif self._pending_segment is not None and self._pending_segment.url == event.url:
+            return
+
+        if self._buffer_level > self.safe_buffer_level:
             return
 
         # If the segment is a dropped url, ignore it
