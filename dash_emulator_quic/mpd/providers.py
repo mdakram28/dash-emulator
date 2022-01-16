@@ -7,7 +7,7 @@ from dash_emulator.models import MPD
 from dash_emulator.mpd import MPDProvider
 from dash_emulator.mpd.parser import MPDParser
 
-from dash_emulator_quic.downloader.quic.client import QuicClient
+from dash_emulator_quic.downloader.client import QuicClient
 
 
 class BETAMPDProviderImpl(MPDProvider):

@@ -10,7 +10,7 @@ from dash_emulator.models import AdaptationSet
 from dash_emulator.scheduler import Scheduler, SchedulerEventListener
 
 from dash_emulator_quic.abr import ExtendedABRController
-from dash_emulator_quic.downloader.quic.client import QuicClient
+from dash_emulator_quic.downloader.client import QuicClient
 
 
 class BETAScheduler(Scheduler, ABC):

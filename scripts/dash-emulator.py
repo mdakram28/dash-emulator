@@ -75,13 +75,13 @@ if __name__ == '__main__':
         log.error("Arguments validation error, exit.")
         exit(-1)
 
-    (player_config, ) = load_config_env(args['env'])
+    (player_config, downloader_config) = load_config_env(args['env'])
 
     uvloop.install()
 
 
     async def main():
-        player, analyzer = build_dash_player_over_quic(player_config, beta=args["beta"], plot_output=args["plot"], dump_results=args['dump_results'])
+        player, analyzer = build_dash_player_over_quic(player_config, downloader_config, beta=args["beta"], plot_output=args["plot"], dump_results=args['dump_results'])
         # player = build_dash_player()
 
         await player.start(args["target"])
