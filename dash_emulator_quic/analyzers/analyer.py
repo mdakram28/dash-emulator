@@ -149,7 +149,6 @@ class BETAPlaybackAnalyzer(PlaybackAnalyzer, PlayerEventListener, SchedulerEvent
         return representation
 
     def save(self, output: io.TextIOBase) -> None:
-        print(self.config)
         bitrates = []
 
         last_quality = None
