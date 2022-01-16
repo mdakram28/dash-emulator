@@ -11,8 +11,8 @@ from aioquic.quic.configuration import QuicConfiguration
 from aioquic.tls import SessionTicket
 from dash_emulator.download import DownloadManager, DownloadEventListener
 
-from dash_emulator_quic.quic.event_parser import H3EventParser
-from dash_emulator_quic.quic.protocol import HttpProtocol
+from dash_emulator_quic.downloader.quic.event_parser import H3EventParser
+from dash_emulator_quic.downloader.quic.protocol import HttpProtocol
 
 
 class QuicClient(DownloadManager, ABC):

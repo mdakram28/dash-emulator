@@ -16,8 +16,8 @@ from dash_emulator_quic.beta.beta import BETAManagerImpl
 from dash_emulator_quic.beta.vq_threshold import MockVQThresholdManager
 from dash_emulator_quic.config import PlayerConfiguration
 from dash_emulator_quic.mpd.providers import BETAMPDProviderImpl
-from dash_emulator_quic.quic.client import QuicClientImpl
-from dash_emulator_quic.quic.event_parser import H3EventParserImpl
+from dash_emulator_quic.downloader.quic.client import QuicClientImpl
+from dash_emulator_quic.downloader.quic.event_parser import H3EventParserImpl
 from dash_emulator_quic.scheduler.scheduler import BETAScheduler, BETASchedulerImpl
 
 
