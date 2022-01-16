@@ -23,6 +23,6 @@ setup(name='dash-emulator-quic',
       author_email='yang.jace.liu@linux.com',
       url='https://github.com/Yang-Jace-Liu/dash-emulator-quic',
       packages=find_packages(),
-      scripts=["scripts/dash-emulator.py"],
+      scripts=["scripts/dash-emulator.py", "scripts/dash-emulator-analyze.py"],
       install_requires=requirements
       )

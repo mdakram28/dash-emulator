@@ -138,7 +138,7 @@ class PlaybackReportAnalyzer:
         assert self._dataset_home is not None
         vmaf = dict()  # vmaf[quality index][drop_rate][segment_index]
         video_name = self.video.split('-')[0]
-        composed_vmaf_reports = glob(f"{self._dataset_home}/av1/{video_name}/*-composed.txt")
+        composed_vmaf_reports = glob(f"{self._dataset_home}/{video_name}/*-composed.txt")
         pattern = re.compile(r"[\s\S]+quality(\d)-drop(\d+)-composed\.txt")
         for composed_vmaf_report in composed_vmaf_reports:
             matches = re.match(pattern, composed_vmaf_report)
