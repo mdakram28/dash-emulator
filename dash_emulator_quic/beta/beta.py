@@ -14,7 +14,7 @@ from dash_emulator.service import AsyncService
 from dash_emulator_quic.beta.events import *
 from dash_emulator_quic.beta.vq_threshold import VQThresholdManager
 from dash_emulator_quic.models import SegmentRequest
-from dash_emulator_quic.quic.client import QuicClient
+from dash_emulator_quic.downloader.client import QuicClient
 
 
 class BETAManager(AsyncService):

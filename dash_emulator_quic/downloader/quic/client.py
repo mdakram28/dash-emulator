@@ -1,6 +1,5 @@
 import asyncio
 import logging
-from abc import ABC, abstractmethod
 from typing import List, Optional, Tuple, Set, AsyncIterator
 from urllib.parse import urlparse
 
@@ -9,40 +8,11 @@ from aioquic.h3.connection import H3_ALPN
 from aioquic.h3.events import H3Event
 from aioquic.quic.configuration import QuicConfiguration
 from aioquic.tls import SessionTicket
-from dash_emulator.download import DownloadManager, DownloadEventListener
+from dash_emulator.download import DownloadEventListener
 
-from dash_emulator_quic.quic.event_parser import H3EventParser
-from dash_emulator_quic.quic.protocol import HttpProtocol
-
-
-class QuicClient(DownloadManager, ABC):
-    @abstractmethod
-    async def wait_complete(self, url: str) -> Optional[Tuple[bytes, int]]:
-        """
-        Wait the stream to complete
-
-        Parameters
-        ----------
-        url:
-            The URL to wait for
-
-        Returns
-        -------
-            The return value could be None, meaning that the stream got dropped.
-            It could be a tuple, the bytes as the first element and size as the second element.
-        """
-        pass
-
-    @abstractmethod
-    def cancel_read_url(self, url: str):
-        pass
-
-    @abstractmethod
-    async def drop_url(self, url: str):
-        """
-        Drop the URL downloading process
-        """
-        pass
+from dash_emulator_quic.downloader.client import QuicClient
+from dash_emulator_quic.downloader.quic.event_parser import H3EventParser
+from dash_emulator_quic.downloader.quic.protocol import HttpProtocol
 
 
 class QuicClientImpl(QuicClient):

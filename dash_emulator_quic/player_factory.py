@@ -14,14 +14,17 @@ from dash_emulator_quic.abr import ExtendedABRController, BetaABRController
 from dash_emulator_quic.analyzers.analyer import BETAPlaybackAnalyzer, BETAPlaybackAnalyzerConfig, PlaybackAnalyzer
 from dash_emulator_quic.beta.beta import BETAManagerImpl
 from dash_emulator_quic.beta.vq_threshold import MockVQThresholdManager
-from dash_emulator_quic.config import PlayerConfiguration
+from dash_emulator_quic.config import PlayerConfiguration, DownloaderConfiguration, DownloaderProtocolEnum
+from dash_emulator_quic.downloader.tcp import TCPClientImpl
 from dash_emulator_quic.mpd.providers import BETAMPDProviderImpl
-from dash_emulator_quic.quic.client import QuicClientImpl
-from dash_emulator_quic.quic.event_parser import H3EventParserImpl
+from dash_emulator_quic.downloader.quic.client import QuicClientImpl
+from dash_emulator_quic.downloader.quic.event_parser import H3EventParserImpl
 from dash_emulator_quic.scheduler.scheduler import BETAScheduler, BETASchedulerImpl
 
 
-def build_dash_player_over_quic(player_configuration: PlayerConfiguration, beta=False, plot_output=None, dump_results=None) -> Tuple[DASHPlayer, PlaybackAnalyzer]:
+def build_dash_player_over_quic(player_configuration: PlayerConfiguration,
+                                downloader_configuration: DownloaderConfiguration,
+                                beta=False, plot_output=None, dump_results=None) -> Tuple[DASHPlayer, PlaybackAnalyzer]:
     """
     Build a MPEG-DASH Player over QUIC network
 
@@ -40,15 +43,23 @@ def build_dash_player_over_quic(player_configuration: PlayerConfiguration, beta=
         cfg = Config
         buffer_manager: BufferManager = BufferManagerImpl()
         event_logger = EventLogger()
-        mpd_provider: MPDProvider = BETAMPDProviderImpl(DefaultMPDParser(), cfg.update_interval,
-                                                        QuicClientImpl([], event_parser=H3EventParserImpl()))
+
+        if downloader_configuration.protocol is DownloaderProtocolEnum.QUIC:
+            mpd_provider: MPDProvider = BETAMPDProviderImpl(DefaultMPDParser(), cfg.update_interval,
+                                                            QuicClientImpl([], event_parser=H3EventParserImpl()))
+        else:
+            mpd_provider: MPDProvider = BETAMPDProviderImpl(DefaultMPDParser(), cfg.update_interval, TCPClientImpl([]))
+
         analyzer: BETAPlaybackAnalyzer = BETAPlaybackAnalyzer(
             BETAPlaybackAnalyzerConfig(save_plots_dir=plot_output, dump_results_path=dump_results),
             mpd_provider
         )
         bandwidth_meter = BandwidthMeterImpl(cfg.max_initial_bitrate, cfg.smoothing_factor, [analyzer])
         h3_event_parser = H3EventParserImpl(listeners=[bandwidth_meter, analyzer])
-        download_manager = QuicClientImpl([bandwidth_meter, analyzer], event_parser=h3_event_parser)
+        if downloader_configuration.protocol is DownloaderProtocolEnum.QUIC:
+            download_manager = QuicClientImpl([bandwidth_meter, analyzer], event_parser=h3_event_parser)
+        else:
+            download_manager = TCPClientImpl([bandwidth_meter, analyzer])
         abr_controller = BetaABRController(
             DashABRController(PANIC_BUFFER_LEVEL, SAFE_BUFFER_LEVEL, bandwidth_meter, buffer_manager))
         scheduler: Scheduler = BETASchedulerImpl(BUFFER_DURATION, cfg.update_interval, download_manager,
@@ -62,14 +73,20 @@ def build_dash_player_over_quic(player_configuration: PlayerConfiguration, beta=
         cfg = Config
         buffer_manager: BufferManager = BufferManagerImpl()
         event_logger = EventLogger()
-        mpd_provider: MPDProvider = BETAMPDProviderImpl(DefaultMPDParser(), cfg.update_interval,
-                                                        QuicClientImpl([], H3EventParserImpl()))
+        if downloader_configuration.protocol is DownloaderProtocolEnum.QUIC:
+            mpd_provider: MPDProvider = BETAMPDProviderImpl(DefaultMPDParser(), cfg.update_interval,
+                                                            QuicClientImpl([], H3EventParserImpl()))
+        else:
+            mpd_provider: MPDProvider = BETAMPDProviderImpl(DefaultMPDParser(), cfg.update_interval, TCPClientImpl([]))
         analyzer: BETAPlaybackAnalyzer = BETAPlaybackAnalyzer(
             BETAPlaybackAnalyzerConfig(save_plots_dir=plot_output, dump_results_path=dump_results),
             mpd_provider)
         bandwidth_meter = BandwidthMeterImpl(cfg.max_initial_bitrate, cfg.smoothing_factor, [analyzer])
         h3_event_parser = H3EventParserImpl([bandwidth_meter, analyzer])
-        download_manager = QuicClientImpl([bandwidth_meter, analyzer], h3_event_parser)
+        if downloader_configuration.protocol is DownloaderProtocolEnum.QUIC:
+            download_manager = QuicClientImpl([bandwidth_meter, analyzer], h3_event_parser)
+        else:
+            download_manager = TCPClientImpl([bandwidth_meter, analyzer])
 
         vq_threshold_manager = MockVQThresholdManager()
         beta_manager = BETAManagerImpl(mpd_provider, download_manager, vq_threshold_manager, panic_buffer_level=PANIC_BUFFER_LEVEL, safe_buffer_level=SAFE_BUFFER_LEVEL)
