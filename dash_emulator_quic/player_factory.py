@@ -14,13 +14,14 @@ from dash_emulator_quic.abr import ExtendedABRController, BetaABRController
 from dash_emulator_quic.analyzers.analyer import BETAPlaybackAnalyzer, BETAPlaybackAnalyzerConfig, PlaybackAnalyzer
 from dash_emulator_quic.beta.beta import BETAManagerImpl
 from dash_emulator_quic.beta.vq_threshold import MockVQThresholdManager
+from dash_emulator_quic.config import PlayerConfiguration
 from dash_emulator_quic.mpd.providers import BETAMPDProviderImpl
 from dash_emulator_quic.quic.client import QuicClientImpl
 from dash_emulator_quic.quic.event_parser import H3EventParserImpl
 from dash_emulator_quic.scheduler.scheduler import BETAScheduler, BETASchedulerImpl
 
 
-def build_dash_player_over_quic(beta=False, plot_output=None, dump_results=None) -> Tuple[DASHPlayer, PlaybackAnalyzer]:
+def build_dash_player_over_quic(player_configuration: PlayerConfiguration, beta=False, plot_output=None, dump_results=None) -> Tuple[DASHPlayer, PlaybackAnalyzer]:
     """
     Build a MPEG-DASH Player over QUIC network
 
@@ -29,11 +30,11 @@ def build_dash_player_over_quic(beta=False, plot_output=None, dump_results=None)
     player: Player
         A MPEG-DASH Player
     """
-    BUFFER_DURATION = 8
-    SAFE_BUFFER_LEVEL = 6
-    PANIC_BUFFER_LEVEL = 2.5
-    MIN_REBUFFER_DURATION = 2
-    MIN_START_DURATION = 2
+    BUFFER_DURATION = player_configuration.buffer_duration
+    SAFE_BUFFER_LEVEL = player_configuration.safe_buffer_level
+    PANIC_BUFFER_LEVEL = player_configuration.panic_buffer_level
+    MIN_REBUFFER_DURATION = player_configuration.min_rebuffer_duration
+    MIN_START_DURATION = player_configuration.min_start_duration
 
     if not beta:
         cfg = Config

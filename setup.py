@@ -1,8 +1,6 @@
 #!/usr/bin/env python3
 
-from distutils.core import setup
-
-from setuptools import find_packages
+from setuptools import find_packages, setup
 
 requirements = [
     "wsproto",
@@ -13,6 +11,7 @@ requirements = [
     "behave",
     "aioquic",
     "matplotlib",
+    "pyyaml",
     "dash-emulator @ git+https://github.com/yang-jace-liu/dash-emulator#egg=dash-emulator"
 ]
 
@@ -24,5 +23,7 @@ setup(name='dash-emulator-quic',
       url='https://github.com/Yang-Jace-Liu/dash-emulator-quic',
       packages=find_packages(),
       scripts=["scripts/dash-emulator.py", "scripts/dash-emulator-analyze.py"],
-      install_requires=requirements
+      install_requires=requirements,
+      include_package_data=True,
+      package_data={'': ['resources/*']}
       )
