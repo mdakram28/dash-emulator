@@ -2,7 +2,7 @@ from dataclasses import dataclass
 
 
 @dataclass
-class PlayerConfiguration(object):
+class PlayerBufferSettings(object):
     buffer_duration: float
     safe_buffer_level: float
     panic_buffer_level: float
@@ -10,5 +10,12 @@ class PlayerConfiguration(object):
     min_start_duration: float
 
 
+@dataclass
+class PlayerConfiguration(object):
+    player_buffer_settings: PlayerBufferSettings
+    downloader: str
+
+
 def load_player_config(configuration) -> PlayerConfiguration:
-    return PlayerConfiguration(**(configuration["player"]))
+    player_buffer_settings = PlayerBufferSettings(**(configuration["player"]["buffer-settings"]))
+    return PlayerConfiguration(player_buffer_settings, configuration['player']['downloader'])

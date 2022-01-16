@@ -30,11 +30,11 @@ def build_dash_player_over_quic(player_configuration: PlayerConfiguration, beta=
     player: Player
         A MPEG-DASH Player
     """
-    BUFFER_DURATION = player_configuration.buffer_duration
-    SAFE_BUFFER_LEVEL = player_configuration.safe_buffer_level
-    PANIC_BUFFER_LEVEL = player_configuration.panic_buffer_level
-    MIN_REBUFFER_DURATION = player_configuration.min_rebuffer_duration
-    MIN_START_DURATION = player_configuration.min_start_duration
+    BUFFER_DURATION = player_configuration.player_buffer_settings.buffer_duration
+    SAFE_BUFFER_LEVEL = player_configuration.player_buffer_settings.safe_buffer_level
+    PANIC_BUFFER_LEVEL = player_configuration.player_buffer_settings.panic_buffer_level
+    MIN_REBUFFER_DURATION = player_configuration.player_buffer_settings.min_rebuffer_duration
+    MIN_START_DURATION = player_configuration.player_buffer_settings.min_start_duration
 
     if not beta:
         cfg = Config
