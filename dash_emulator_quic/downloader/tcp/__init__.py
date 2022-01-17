@@ -1,6 +1,6 @@
 import asyncio
 import logging
-from typing import Optional, Tuple, List
+from typing import Optional, Tuple, List, Dict, Set
 
 import aiohttp
 from dash_emulator.download import DownloadEventListener
@@ -16,16 +16,40 @@ class TCPClientImpl(QuicClient):
         self._download_queue = asyncio.Queue()
         self._session = None
         self._session_close_event = asyncio.Event()
-        self._download_finish_event = asyncio.Event()
         self._is_busy = False
         self._downloading_task = None  # type: Optional[asyncio.Task]
-        self._content = bytearray()
-        self._headers = None
-        self._completed_urls = set()
+
+        self._completed_urls = set()  # type: Set[str]
+        self._partially_accepted_urls = set()  # type: Set[str]
+        self._cancelled_urls = set()  # type: Set[str]
+
+        self._headers = {}  # type: Dict[str, Dict[str, str]]
+        self._content = {}  # type: Dict[str, bytearray]
+
+        self._waiting_urls = {}  # type: Dict[str, asyncio.Event]
 
     async def wait_complete(self, url: str) -> Optional[Tuple[bytes, int]]:
-        await self._download_finish_event.wait()
-        return bytes(self._content), int(self._headers['CONTENT-LENGTH'])
+        # If url is in partially accepted set, return read bytes and length
+        if url in self._partially_accepted_urls:
+            content = self._content[url]
+            return bytes(content), int(self._headers[url]['CONTENT-LENGTH'])
+        # If the url has been dropped, return None
+        if url in self._cancelled_urls:
+            return None
+        # Wait the url to be completed
+        if url not in self._completed_urls:
+            self._waiting_urls[url] = asyncio.Event()
+            await self._waiting_urls[url].wait()
+            del self._waiting_urls[url]
+        # If the url has been canceled, return None
+        if url in self._cancelled_urls:
+            self._cancelled_urls.remove(url)
+            return None
+        if url in self._completed_urls:
+            self._completed_urls.remove(url)
+        content = self._content[url]
+        size = int(self._headers[url]['CONTENT-LENGTH'])
+        return bytes(content), size
 
     def cancel_read_url(self, url: str):
         return
@@ -38,6 +62,8 @@ class TCPClientImpl(QuicClient):
         return self._is_busy
 
     async def download(self, url, save: bool = False) -> Optional[bytes]:
+        self._waiting_urls[url] = asyncio.Event()
+        self._content[url] = bytearray()
         if self._session is None:
             session_start_event = asyncio.Event()
             asyncio.create_task(self._create_session(session_start_event))
@@ -49,17 +75,20 @@ class TCPClientImpl(QuicClient):
         return None
 
     async def _download_inner(self, url):
-        self._content = bytearray()
-        self._download_finish_event.clear()
         async with self._session.get(url) as resp:
-            self._headers = resp.headers
+            self._headers[url] = resp.headers
+            size = int(resp.headers['CONTENT-LENGTH'])
             async for chunk in resp.content.iter_chunked(10240):
-                self._content += bytearray(chunk)
+                self._content[url] += bytearray(chunk)
+                self.log.info(
+                    f"Bytes transferred: length: {len(chunk)}, position: {len(self._content[url])}, size: {size}, url: {url}")
                 for listener in self._event_listeners:
-                    await listener.on_bytes_transferred(len(chunk), url, len(self._content), int(resp.headers['CONTENT-LENGTH']))
-        self._download_finish_event.set()
+                    await listener.on_bytes_transferred(len(chunk), url, len(self._content[url]), size)
+        self.log.info(f"Transfer ends: {len(self._content[url])}")
+        self._completed_urls.add(url)
+        self._waiting_urls[url].set()
         for listener in self._event_listeners:
-            await listener.on_transfer_end(len(self._content), url)
+            await listener.on_transfer_end(len(self._content[url]), url)
 
     async def _download_task(self):
         while True:
@@ -68,8 +97,6 @@ class TCPClientImpl(QuicClient):
             self._is_busy = True
 
             self._downloading_task = asyncio.create_task(self._download_inner(req_url))
-            await self._download_finish_event.wait()
-            self._downloading_task = None
 
     async def _create_session(self, session_start_event):
         async with aiohttp.ClientSession() as session:
@@ -84,11 +111,13 @@ class TCPClientImpl(QuicClient):
             self._session_close_event.set()
 
     async def stop(self, url: str):
+        self.log.info("STOP DOWNLOADING: " + url)
         if self._downloading_task is not None:
             self._downloading_task.cancel()
-        self._download_finish_event.set()
+        self._partially_accepted_urls.add(url)
+        self._waiting_urls[url].set()
         for listener in self._event_listeners:
-            await listener.on_transfer_canceled(url, len(self._content), int(self._headers['CONTENT-LENGTH']))
+            await listener.on_transfer_end(len(self._content), url)
 
     def add_listener(self, listener: DownloadEventListener):
         self._event_listeners.append(listener)

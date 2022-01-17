@@ -18,7 +18,7 @@ def load_config_env(env_parameter: str) -> Tuple[PlayerConfiguration, Downloader
             config_file_stream = pkg_resources.resource_stream('dash_emulator_quic',
                                                                f'resources/application-{env_parameter}.yaml')
         except FileNotFoundError as e:
-            log.warning(f"Cannot find applicatgion-{env_parameter}.yaml. Trying to load it as a full path")
+            log.warning(f"Cannot find application-{env_parameter}.yaml. Trying to load it as a full path")
             try:
                 config_file_stream = open(env_parameter)
             except FileNotFoundError:
