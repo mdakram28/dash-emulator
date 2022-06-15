@@ -198,3 +198,5 @@ dmypy.json
 .pybuilder
 
 venv/
+
+dataset/
