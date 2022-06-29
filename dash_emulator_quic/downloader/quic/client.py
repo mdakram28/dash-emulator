@@ -1,5 +1,6 @@
 import asyncio
 import logging
+import ssl
 from typing import List, Optional, Tuple, Set, AsyncIterator
 from urllib.parse import urlparse
 
@@ -39,7 +40,7 @@ class QuicClientImpl(QuicClient):
             With this ticket, The QUIC Client can have 0-RTT on the first request (if the server allows).
             The QUIC Client will use 0-RTT for the following requests no matter if this parameter is provided.
         """
-        self.quic_configuration = QuicConfiguration(alpn_protocols=H3_ALPN, is_client=True)
+        self.quic_configuration = QuicConfiguration(alpn_protocols=H3_ALPN, is_client=True, verify_mode=ssl.CERT_NONE)
         self.event_parser = event_parser
         if session_ticket is not None:
             self.quic_configuration.session_ticket = session_ticket

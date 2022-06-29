@@ -39,6 +39,7 @@ def build_dash_player_over_quic(player_configuration: PlayerConfiguration,
     MIN_REBUFFER_DURATION = player_configuration.player_buffer_settings.min_rebuffer_duration
     MIN_START_DURATION = player_configuration.player_buffer_settings.min_start_duration
 
+    print("**************************", downloader_configuration.protocol)
     if not beta:
         cfg = Config
         buffer_manager: BufferManager = BufferManagerImpl()

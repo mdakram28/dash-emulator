@@ -5,4 +5,4 @@ player:
     panic_buffer_level: 1.5
     min_rebuffer_duration: 2
     min_start_duration: 2
-  downloader: tcp
+  downloader: quic

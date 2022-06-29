@@ -99,7 +99,7 @@ class TCPClientImpl(QuicClient):
             self._downloading_task = asyncio.create_task(self._download_inner(req_url))
 
     async def _create_session(self, session_start_event):
-        async with aiohttp.ClientSession() as session:
+        async with aiohttp.ClientSession(connector=aiohttp.TCPConnector(verify_ssl=False)) as session:
             self._session = session
             session_start_event.set()
             task = asyncio.create_task(self._download_task())

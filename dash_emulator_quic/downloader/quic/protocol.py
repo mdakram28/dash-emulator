@@ -241,10 +241,10 @@ class HttpProtocol(QuicConnectionProtocol):
             self._requests_tasks[request.url.url] = task
             try:
                 event = await task
+                yield event
                 if isinstance(event, DataReceived):
                     if event.stream_ended:
                         return
-                yield event
             except asyncio.CancelledError:
                 self.log.info(f"Cancel Reading {request.url.url}")
                 return
