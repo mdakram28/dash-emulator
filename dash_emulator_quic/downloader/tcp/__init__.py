@@ -1,5 +1,6 @@
 import asyncio
 import logging
+import ssl
 from typing import Optional, Tuple, List, Dict, Set
 
 import aiohttp
@@ -11,13 +12,14 @@ from dash_emulator_quic.downloader.client import QuicClient
 class TCPClientImpl(QuicClient):
     log = logging.getLogger("TCPClientImpl")
 
-    def __init__(self, event_listeners: List[DownloadEventListener]):
+    def __init__(self, event_listeners: List[DownloadEventListener], *, ssl_keylog_file=""):
         self._event_listeners = event_listeners
         self._download_queue = asyncio.Queue()
         self._session = None
         self._session_close_event = asyncio.Event()
         self._is_busy = False
         self._downloading_task = None  # type: Optional[asyncio.Task]
+        self._downloading_task_resp = None
 
         self._completed_urls = set()  # type: Set[str]
         self._partially_accepted_urls = set()  # type: Set[str]
@@ -27,6 +29,7 @@ class TCPClientImpl(QuicClient):
         self._content = {}  # type: Dict[str, bytearray]
 
         self._waiting_urls = {}  # type: Dict[str, asyncio.Event]
+        self.ssl_keylog_file = ssl_keylog_file
 
     async def wait_complete(self, url: str) -> Optional[Tuple[bytes, int]]:
         # If url is in partially accepted set, return read bytes and length
@@ -61,7 +64,7 @@ class TCPClientImpl(QuicClient):
     def is_busy(self):
         return self._is_busy
 
-    async def download(self, url, save: bool = False) -> Optional[bytes]:
+    async def download(self, url, save: bool = False, rate=None) -> Optional[bytes]:
         self._waiting_urls[url] = asyncio.Event()
         self._content[url] = bytearray()
         if self._session is None:
@@ -76,9 +79,10 @@ class TCPClientImpl(QuicClient):
 
     async def _download_inner(self, url):
         async with self._session.get(url) as resp:
+            self._downloading_task_resp = resp
             self._headers[url] = resp.headers
             size = int(resp.headers['CONTENT-LENGTH'])
-            async for chunk in resp.content.iter_chunked(10240):
+            async for chunk in resp.content.iter_any():
                 self._content[url] += bytearray(chunk)
                 self.log.info(
                     f"Bytes transferred: length: {len(chunk)}, position: {len(self._content[url])}, size: {size}, url: {url}")
@@ -99,7 +103,10 @@ class TCPClientImpl(QuicClient):
             self._downloading_task = asyncio.create_task(self._download_inner(req_url))
 
     async def _create_session(self, session_start_event):
-        async with aiohttp.ClientSession(connector=aiohttp.TCPConnector(verify_ssl=False)) as session:
+        ssl_context = ssl.SSLContext()
+        ssl_context.verify_mode = ssl.CERT_NONE
+        # ssl_context.keylog_filename = self.ssl_keylog_file
+        async with aiohttp.ClientSession(connector=aiohttp.TCPConnector(ssl_context=ssl_context)) as session:
             self._session = session
             session_start_event.set()
             task = asyncio.create_task(self._download_task())
@@ -114,6 +121,8 @@ class TCPClientImpl(QuicClient):
         self.log.info("STOP DOWNLOADING: " + url)
         if self._downloading_task is not None:
             self._downloading_task.cancel()
+            if self._downloading_task_resp.connection is not None:
+                self._downloading_task_resp.connection.transport.abort()
         self._partially_accepted_urls.add(url)
         self._waiting_urls[url].set()
         for listener in self._event_listeners:

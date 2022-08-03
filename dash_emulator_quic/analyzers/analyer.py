@@ -4,6 +4,7 @@ import json
 import logging
 import os
 from abc import ABC, abstractmethod
+from json import dumps
 from typing import List, Tuple, TextIO, Optional, Dict
 
 import matplotlib.pyplot as plt
@@ -24,23 +25,31 @@ class PlaybackAnalyzer(ABC):
 
 
 class BETAPlaybackAnalyzerConfig:
-    def __init__(self, save_plots_dir=None, dump_results_path=None):
+    def __init__(self, save_plots_dir=None, dump_results_path=None, dump_events=None, run_id=None):
         self.save_plots_dir = save_plots_dir
         self.dump_results_path = dump_results_path
+        self.dump_events = dump_events
+        self.run_id = run_id
 
 
 class AnalyzerSegment:
-    def __init__(self, index, start_time, completion_time, quality_selection, bandwidth):
+    def __init__(self, index, start_time, completion_time, quality_selection, bandwidth, extra_args):
         self.index = index
         self.start_time = start_time
         self.completion_time = completion_time
         self.quality_selection = quality_selection
         self.bandwidth = bandwidth
+        self.extra_args = extra_args
 
         self.position = 0
+        self.stop_position = 0
         self.size = 0
         self.segment_bitrate = 0
         self.url = ""
+
+    @property
+    def stop_ratio(self):
+        return self.stop_position / self.size
 
     @property
     def ratio(self):
@@ -49,6 +58,10 @@ class AnalyzerSegment:
 
 class BETAPlaybackAnalyzer(PlaybackAnalyzer, PlayerEventListener, SchedulerEventListener, DownloadEventListener,
                            BandwidthUpdateListener):
+
+    async def on_position_change(self, position):
+        pass
+
     log = logging.getLogger("BETAPlaybackAnalyzer")
 
     def __init__(self, config: BETAPlaybackAnalyzerConfig, mpd_provider: MPDProvider):
@@ -56,13 +69,20 @@ class BETAPlaybackAnalyzer(PlaybackAnalyzer, PlayerEventListener, SchedulerEvent
         self._mpd_provider = mpd_provider
         self._start_time = datetime.datetime.now().timestamp()
         self._buffer_levels: List[Tuple[float, float]] = []
-        self._throughputs: List[Tuple[float, int]] = []
-        self._states: List[Tuple[float, State]] = []
+        self._throughputs: List[Tuple[float, int, dict]] = []
+        self._cont_bw: List[Tuple[float, int]] = []
+        self._states: List[Tuple[float, State, float]] = []
         self._segments: List[AnalyzerSegment] = []  # start time, completion time, quality selection, bandwidth
         self._segments_by_url: Dict[str, AnalyzerSegment] = {}
 
         # index, start time, completion time, quality, bandwidth
         self._current_segment: Optional[AnalyzerSegment] = None
+
+        self.write_local_event(f"PLAYBACK_START {int(self._start_time*1000)}")
+
+    def write_local_event(self, event):
+        with open(self.config.dump_events, 'a') as f:
+            f.write(f"#EVENT " + event + "\n")
 
     @staticmethod
     def _seconds_since(start_time: float):
@@ -82,7 +102,7 @@ class BETAPlaybackAnalyzer(PlaybackAnalyzer, PlayerEventListener, SchedulerEvent
         return datetime.datetime.now().timestamp() - start_time
 
     async def on_state_change(self, position: float, old_state: State, new_state: State):
-        self._states.append((self._seconds_since(self._start_time), new_state))
+        self._states.append((self._seconds_since(self._start_time), new_state, position))
 
     async def on_buffer_level_change(self, buffer_level):
         self._buffer_levels.append((self._seconds_since(self._start_time), buffer_level))
@@ -91,8 +111,13 @@ class BETAPlaybackAnalyzer(PlaybackAnalyzer, PlayerEventListener, SchedulerEvent
         segment = self._segments_by_url[url]
         segment.size = size
         segment.position = position
+        if "first_byte_at" not in segment.extra_args:
+            segment.extra_args["first_byte_at"] = self._seconds_since(self._start_time)
+        segment.extra_args["last_byte_at"] = self._seconds_since(self._start_time)
+        # self.log.info(f"Segment {url.split('/')[-1]} received {size} bytes")
 
     async def on_transfer_end(self, size: int, url: str) -> None:
+        self.log.info(f"########## on_transfer_end {url.split('/')[-1]}")
         pass
 
     async def on_transfer_start(self, url) -> None:
@@ -100,22 +125,30 @@ class BETAPlaybackAnalyzer(PlaybackAnalyzer, PlayerEventListener, SchedulerEvent
         self._segments_by_url[url] = self._current_segment
 
     async def on_transfer_canceled(self, url: str, position: int, size: int) -> None:
+        self.log.info(f"########## on_transfer_canceled {url.split('/')[-1]}")
         pass
 
     async def on_segment_download_start(self, index, selections):
         throughput = self._throughputs[-1][1] if len(self._throughputs) != 0 else 0
+        extra_args = self._throughputs[-1][2] if len(self._throughputs) != 0 else {}
         self._current_segment = AnalyzerSegment(index, self._seconds_since(self._start_time), None, selections[0],
-                                                throughput)
+                                                throughput,extra_args)
 
     async def on_segment_download_complete(self, index):
+        self.log.info(f"########## on_segment_download_complete {index+1}")
         completion_time = self._seconds_since(self._start_time)
+        self._current_segment.stop_position = self._current_segment.position
         self._current_segment.completion_time = completion_time
 
         self._segments.append(self._current_segment)
         assert len(self._segments) == index + 1
 
-    async def on_bandwidth_update(self, bw: int) -> None:
-        self._throughputs.append((self._seconds_since(self._start_time), bw))
+    async def on_bandwidth_update(self, bw: int, extra_args: dict) -> None:
+        self._throughputs.append((self._seconds_since(self._start_time), bw, extra_args))
+
+    async def on_continuous_bw_update(self, bw: int) -> None:
+        self._cont_bw.append((self._seconds_since(self._start_time), bw))
+
 
     def _get_video_representation(self, representation_id):
         """
@@ -180,7 +213,7 @@ class BETAPlaybackAnalyzer(PlaybackAnalyzer, PlayerEventListener, SchedulerEvent
         output.write("Stalls:\n")
         output.write("%-6s%-6s%-6s\n" % ("Start", "End", "Duration"))
         buffering_start = None
-        for time, state in self._states:
+        for time, state, position in self._states:
             if state == State.BUFFERING:
                 buffering_start = time
             elif state == State.READY:
@@ -208,11 +241,11 @@ class BETAPlaybackAnalyzer(PlaybackAnalyzer, PlayerEventListener, SchedulerEvent
 
         if self.config.dump_results_path is not None:
             self.dump_results(self.config.dump_results_path, self._segments, total_stall_num, total_stall_duration,
-                              average_bitrate, quality_switches)
+                              average_bitrate, quality_switches, self._states, self._cont_bw)
 
     @staticmethod
     def dump_results(path, segments: List[AnalyzerSegment], num_stall, dur_stall, avg_bitrate,
-                     num_quality_switches):
+                     num_quality_switches, states, cont_bw):
         data = {
             "segments": []
         }
@@ -225,7 +258,9 @@ class BETAPlaybackAnalyzer(PlaybackAnalyzer, PlayerEventListener, SchedulerEvent
                 'bitrate': segment.segment_bitrate,
                 'throughput': segment.bandwidth,
                 'ratio': segment.ratio,
-                'url': segment.url
+                'stop_ratio': segment.stop_ratio,
+                'url': segment.url,
+                **segment.extra_args,
             }
             data['segments'].append(data_obj)
 
@@ -233,6 +268,8 @@ class BETAPlaybackAnalyzer(PlaybackAnalyzer, PlayerEventListener, SchedulerEvent
         data['dur_stall'] = dur_stall
         data['avg_bitrate'] = avg_bitrate
         data['num_quality_switches'] = num_quality_switches
+        data['states'] = [{"time": time, "state": str(state), "position": pos} for time,state,pos in states]
+        data["bandwidth_estimate"] = [{"time": bw[0], "bandwidth": bw[1]} for bw in cont_bw]
 
         extra_index = 1
         final_path = f"{path}-{extra_index}.json"

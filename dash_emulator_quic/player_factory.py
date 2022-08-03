@@ -1,5 +1,5 @@
 from typing import Tuple
-
+import os.path as path
 from dash_emulator.abr import DashABRController
 from dash_emulator.bandwidth import BandwidthMeterImpl
 from dash_emulator.buffer import BufferManager, BufferManagerImpl
@@ -20,11 +20,14 @@ from dash_emulator_quic.mpd.providers import BETAMPDProviderImpl
 from dash_emulator_quic.downloader.quic.client import QuicClientImpl
 from dash_emulator_quic.downloader.quic.event_parser import H3EventParserImpl
 from dash_emulator_quic.scheduler.scheduler import BETAScheduler, BETASchedulerImpl
-
+import sslkeylog
 
 def build_dash_player_over_quic(player_configuration: PlayerConfiguration,
                                 downloader_configuration: DownloaderConfiguration,
-                                beta=False, plot_output=None, dump_results=None) -> Tuple[DASHPlayer, PlaybackAnalyzer]:
+                                beta=False, plot_output=None,
+                                dump_results=None, dump_events=None,
+                                run_id=None,
+                                ssl_keylog_file=None) -> Tuple[DASHPlayer, PlaybackAnalyzer]:
     """
     Build a MPEG-DASH Player over QUIC network
 
@@ -40,29 +43,38 @@ def build_dash_player_over_quic(player_configuration: PlayerConfiguration,
     MIN_START_DURATION = player_configuration.player_buffer_settings.min_start_duration
 
     print("**************************", downloader_configuration.protocol)
+    if ssl_keylog_file is not None:
+        sslkeylog.set_keylog(ssl_keylog_file)
+
+    local_dump_events = path.join(path.dirname(dump_results),"event_logs.txt")
     if not beta:
         cfg = Config
         buffer_manager: BufferManager = BufferManagerImpl()
-        event_logger = EventLogger()
 
         if downloader_configuration.protocol is DownloaderProtocolEnum.QUIC:
             mpd_provider: MPDProvider = BETAMPDProviderImpl(DefaultMPDParser(), cfg.update_interval,
-                                                            QuicClientImpl([], event_parser=H3EventParserImpl()))
+                                                            QuicClientImpl([], event_parser=H3EventParserImpl(), ssl_keylog_file=ssl_keylog_file))
+            cont_bw_window = 0.2
+            max_packet_delay = 1
         else:
-            mpd_provider: MPDProvider = BETAMPDProviderImpl(DefaultMPDParser(), cfg.update_interval, TCPClientImpl([]))
+            mpd_provider: MPDProvider = BETAMPDProviderImpl(DefaultMPDParser(), cfg.update_interval, TCPClientImpl([], ssl_keylog_file=ssl_keylog_file))
+            cont_bw_window = 1.0
+            max_packet_delay = 10
+        event_logger = EventLogger(dump_events, run_id, mpd_provider)
 
         analyzer: BETAPlaybackAnalyzer = BETAPlaybackAnalyzer(
-            BETAPlaybackAnalyzerConfig(save_plots_dir=plot_output, dump_results_path=dump_results),
+            BETAPlaybackAnalyzerConfig(save_plots_dir=plot_output, dump_results_path=dump_results, dump_events=local_dump_events, run_id=run_id),
             mpd_provider
         )
-        bandwidth_meter = BandwidthMeterImpl(cfg.max_initial_bitrate, cfg.smoothing_factor, [analyzer])
+        bandwidth_meter = BandwidthMeterImpl(cfg.max_initial_bitrate, cfg.smoothing_factor, [analyzer], cont_bw_window=cont_bw_window, 
+            max_packet_delay=max_packet_delay)
         h3_event_parser = H3EventParserImpl(listeners=[bandwidth_meter, analyzer])
         if downloader_configuration.protocol is DownloaderProtocolEnum.QUIC:
-            download_manager = QuicClientImpl([bandwidth_meter, analyzer], event_parser=h3_event_parser)
+            download_manager = QuicClientImpl([bandwidth_meter, analyzer], event_parser=h3_event_parser, ssl_keylog_file=ssl_keylog_file)
         else:
-            download_manager = TCPClientImpl([bandwidth_meter, analyzer])
+            download_manager = TCPClientImpl([bandwidth_meter, analyzer], ssl_keylog_file=ssl_keylog_file)
         abr_controller = BetaABRController(
-            DashABRController(PANIC_BUFFER_LEVEL, SAFE_BUFFER_LEVEL, bandwidth_meter, buffer_manager))
+            DashABRController(PANIC_BUFFER_LEVEL, SAFE_BUFFER_LEVEL, bandwidth_meter, buffer_manager, mpd_provider))
         scheduler: Scheduler = BETASchedulerImpl(BUFFER_DURATION, cfg.update_interval, download_manager,
                                                  bandwidth_meter,
                                                  buffer_manager, abr_controller, [event_logger, analyzer])
@@ -73,21 +85,26 @@ def build_dash_player_over_quic(player_configuration: PlayerConfiguration,
     else:
         cfg = Config
         buffer_manager: BufferManager = BufferManagerImpl()
-        event_logger = EventLogger()
         if downloader_configuration.protocol is DownloaderProtocolEnum.QUIC:
             mpd_provider: MPDProvider = BETAMPDProviderImpl(DefaultMPDParser(), cfg.update_interval,
-                                                            QuicClientImpl([], H3EventParserImpl()))
+                                                            QuicClientImpl([], H3EventParserImpl(), ssl_keylog_file=ssl_keylog_file))
+            cont_bw_window = 0.2
+            max_packet_delay = 1
         else:
-            mpd_provider: MPDProvider = BETAMPDProviderImpl(DefaultMPDParser(), cfg.update_interval, TCPClientImpl([]))
+            mpd_provider: MPDProvider = BETAMPDProviderImpl(DefaultMPDParser(), cfg.update_interval, TCPClientImpl([], ssl_keylog_file=ssl_keylog_file))
+            cont_bw_window = 1.0
+            max_packet_delay = 10
+        event_logger = EventLogger(dump_events, run_id, mpd_provider)
+
         analyzer: BETAPlaybackAnalyzer = BETAPlaybackAnalyzer(
-            BETAPlaybackAnalyzerConfig(save_plots_dir=plot_output, dump_results_path=dump_results),
+            BETAPlaybackAnalyzerConfig(save_plots_dir=plot_output, dump_results_path=dump_results, dump_events=local_dump_events, run_id=run_id),
             mpd_provider)
-        bandwidth_meter = BandwidthMeterImpl(cfg.max_initial_bitrate, cfg.smoothing_factor, [analyzer])
+        bandwidth_meter = BandwidthMeterImpl(cfg.max_initial_bitrate, cfg.smoothing_factor, [analyzer], cont_bw_window=cont_bw_window, max_packet_delay=max_packet_delay)
         h3_event_parser = H3EventParserImpl([bandwidth_meter, analyzer])
         if downloader_configuration.protocol is DownloaderProtocolEnum.QUIC:
-            download_manager = QuicClientImpl([bandwidth_meter, analyzer], h3_event_parser)
+            download_manager = QuicClientImpl([bandwidth_meter, analyzer], h3_event_parser, ssl_keylog_file=ssl_keylog_file)
         else:
-            download_manager = TCPClientImpl([bandwidth_meter, analyzer])
+            download_manager = TCPClientImpl([bandwidth_meter, analyzer], ssl_keylog_file=ssl_keylog_file)
 
         vq_threshold_manager = MockVQThresholdManager()
         beta_manager = BETAManagerImpl(mpd_provider, download_manager, vq_threshold_manager, panic_buffer_level=PANIC_BUFFER_LEVEL, safe_buffer_level=SAFE_BUFFER_LEVEL)
@@ -96,7 +113,7 @@ def build_dash_player_over_quic(player_configuration: PlayerConfiguration,
         h3_event_parser.add_listener(beta_manager)
 
         abr_controller: ExtendedABRController = BetaABRController(
-            DashABRController(PANIC_BUFFER_LEVEL, SAFE_BUFFER_LEVEL, bandwidth_meter, buffer_manager)
+            DashABRController(PANIC_BUFFER_LEVEL, SAFE_BUFFER_LEVEL, bandwidth_meter, buffer_manager, mpd_provider)
         )
 
         scheduler: BETAScheduler = BETASchedulerImpl(BUFFER_DURATION, cfg.update_interval, download_manager,

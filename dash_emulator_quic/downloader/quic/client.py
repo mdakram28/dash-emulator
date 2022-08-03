@@ -27,6 +27,7 @@ class QuicClientImpl(QuicClient):
                  event_listeners: List[DownloadEventListener],
                  event_parser: H3EventParser,
                  session_ticket: Optional[SessionTicket] = None,
+                 ssl_keylog_file: str = None
                  ):
         """
         Parameters
@@ -40,7 +41,12 @@ class QuicClientImpl(QuicClient):
             With this ticket, The QUIC Client can have 0-RTT on the first request (if the server allows).
             The QUIC Client will use 0-RTT for the following requests no matter if this parameter is provided.
         """
-        self.quic_configuration = QuicConfiguration(alpn_protocols=H3_ALPN, is_client=True, verify_mode=ssl.CERT_NONE)
+        self.quic_configuration = QuicConfiguration(
+            alpn_protocols=H3_ALPN, 
+            is_client=True, 
+            verify_mode=ssl.CERT_NONE,
+            secrets_log_file=open(ssl_keylog_file, 'a')
+        )
         self.event_parser = event_parser
         if session_ticket is not None:
             self.quic_configuration.session_ticket = session_ticket
@@ -55,7 +61,7 @@ class QuicClientImpl(QuicClient):
 
         self._canceled_urls: Set[str] = set()
         self._event_queue: Optional[asyncio.Queue[Tuple[H3Event, str]]] = None
-        self._download_queue: Optional[asyncio.Queue[str]] = None
+        self._download_queue: Optional[asyncio.Queue[(str, int)]] = None
 
     @property
     def is_busy(self):
@@ -92,9 +98,14 @@ class QuicClientImpl(QuicClient):
         self.log.info("New session ticket received from server: " + ticket.server_name)
         self.quic_configuration.session_ticket = ticket
 
-    async def _download_internal(self, url: str) -> AsyncIterator[Tuple[H3Event, str]]:
+    async def _download_internal(self, url: str, rate: int) -> AsyncIterator[Tuple[H3Event, str]]:
         self.log.info(f"Downloading Internal: {url}")
-        async for event in self._client.get(url):
+        headers = {}
+        # if rate is not None:
+            # headers["X-Accel-Limit-Rate"] = f"{int(rate*8)} bytes"
+            # headers["X-Accel-Buffering"] = f"no"
+        print(headers)
+        async for event in self._client.get(url, headers):
             yield event, url
 
     async def _download_loop(self):
@@ -106,8 +117,8 @@ class QuicClientImpl(QuicClient):
 
         async def read_new_request():
             while True:
-                req_url = await self._download_queue.get()
-                it = self._download_internal(req_url)
+                req_url, rate = await self._download_queue.get()
+                it = self._download_internal(req_url, rate)
                 asyncio.create_task(drain(it))
 
         asyncio.create_task(read_new_request())
@@ -154,7 +165,7 @@ class QuicClientImpl(QuicClient):
         self._close_event = None
         self._event_queue = None
 
-    async def download(self, url: str, save=False) -> Optional[bytes]:
+    async def download(self, url: str, save=False, rate=None) -> Optional[bytes]:
         # Client hasn't been started. Start the client.
         if self._client is None:
             parsed = urlparse(url)
@@ -169,7 +180,7 @@ class QuicClientImpl(QuicClient):
 
         for listener in self.event_listeners:
             await listener.on_transfer_start(url)
-        await self._download_queue.put(url)
+        await self._download_queue.put((url, rate))
         return None
 
     def add_listener(self, listener: DownloadEventListener):

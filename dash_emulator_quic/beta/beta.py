@@ -28,6 +28,10 @@ class BETAManager(AsyncService):
 
 class BETAManagerImpl(BETAManager, DownloadEventListener, PlayerEventListener, SchedulerEventListener,
                       BandwidthUpdateListener):
+
+    async def on_position_change(self, position):
+        pass
+
     log = logging.getLogger("BETAManagerImpl")
 
     MIN_REF_RATIO = 0.1
@@ -70,6 +74,8 @@ class BETAManagerImpl(BETAManager, DownloadEventListener, PlayerEventListener, S
         self._dropped_urls = set()
         self._dropped_indices = set()
 
+        # self.log.setLevel(logging.DEBUG)
+
     async def on_bytes_transferred(self, length: int, url: str, position: int, size: int) -> None:
         await self._event_queue.put(BytesTransferredEvent(length, url, position, size))
 
@@ -94,8 +100,11 @@ class BETAManagerImpl(BETAManager, DownloadEventListener, PlayerEventListener, S
     async def on_segment_download_complete(self, index):
         await self._event_queue.put(SegmentDownloadCompleteEvent(index))
 
-    async def on_bandwidth_update(self, bw: int) -> None:
+    async def on_bandwidth_update(self, bw: int, extra_args: dict) -> None:
         await self._event_queue.put(BandwidthUpdateEvent(bw))
+
+    async def on_continuous_bw_update(self, bw: int) -> None:
+        pass
 
     async def start(self):
         while True:
@@ -139,6 +148,7 @@ class BETAManagerImpl(BETAManager, DownloadEventListener, PlayerEventListener, S
             self.download_manager.cancel_read_url(self._pending_segment.url)
             self._pending_segment = None
         elif self._pending_segment is not None and self._pending_segment.url == event.url:
+            # self.log.info(f"Received pending segment of {event.size} bytes for {event.url.split('/')[-1]}")
             return
 
         if self._buffer_level > self.safe_buffer_level:
@@ -151,10 +161,15 @@ class BETAManagerImpl(BETAManager, DownloadEventListener, PlayerEventListener, S
         if self._current_segment.index in self._dropped_indices:
             return
 
+        self.log.debug(f"current_segment.first_bytes_received = {self._current_segment.first_bytes_received}")
         if self._current_segment.first_bytes_received is False:
+            # This happens when a new quality stream init file is downloaded
+            if event.size == event.length:
+                return
             self._current_segment.first_bytes_received = True
             try:
-                timeout_value = (event.size - event.length) * 8 / self._bw
+                timeout_value = (event.size - event.length) * 8 / (self._bw*0.7)
+                # timeout_value = (event.size - event.length) * 8 / self._bw
             except ZeroDivisionError:
                 timeout_value = 10
             max_timeout_value = timeout_value * 2
@@ -166,23 +181,32 @@ class BETAManagerImpl(BETAManager, DownloadEventListener, PlayerEventListener, S
         now = datetime.datetime.now()
         ratio = event.position / event.size
 
+        self.log.debug(f"state={self._state}, ratio={ratio}, MIN_REF_RATIO={self.MIN_REF_RATIO}")
+
         if self._current_segment.index != 0 and event.url == self._current_segment.url and self._state == State.BUFFERING and ratio > self.MIN_REF_RATIO:
+            self.log.info(f"Stopping download. Reason: started buffering")
             await self._stop_download()
             return
 
-        if ratio > self.MIN_REF_RATIO and self._buffer_level < self.panic_buffer_level:
-            await self._stop_download()
-            return
+        self.log.debug(f"buffer_level={self._buffer_level}, panic_buffer_level={self.panic_buffer_level}")
+        # if ratio > self.MIN_REF_RATIO and self._buffer_level < self.panic_buffer_level:
+        #     await self._stop_download()
+        #     return
 
+        self.log.debug(f"_timeout={self._timeout}, _max_timeout={self._max_timeout}, panic_buffer_level={self.panic_buffer_level}")
         if now < self._timeout:
             return
 
-        if ratio > self.vq_threshold_manager.get_threshold(self._current_segment.index):
+        vq_threshold = self.vq_threshold_manager.get_threshold(self._current_segment.index)
+        self.log.debug(f"ratio={ratio}, vq_threshold={vq_threshold}")
+        if ratio > vq_threshold:
             # await self._stop_download()
+            self.log.info(f"Stopping download. Reason: ratio={ratio} exceeded vq_threshold={vq_threshold}")
             await self._stop_download()
             return
 
         if self._buffer_level < self.panic_buffer_level:
+            self.log.info(f"Stopping download. Reason: buffer_level={self._buffer_level} < panic_buffer_level={self.panic_buffer_level}")
             if ratio < self.MIN_REF_RATIO:
                 # await self.drop_and_replace()
                 await self._stop_download()
@@ -190,6 +214,7 @@ class BETAManagerImpl(BETAManager, DownloadEventListener, PlayerEventListener, S
                 await self._stop_download()
             return
 
+        self.log.info(f"Stopping download. Reason: timeout exceeded")
         if now > self._max_timeout and ratio < self.MIN_REF_RATIO:
             # await self.drop_and_replace()
             await self._stop_download()

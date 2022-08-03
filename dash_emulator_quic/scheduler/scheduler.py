@@ -87,6 +87,7 @@ class BETASchedulerImpl(BETAScheduler):
                 selections = self.abr_controller.update_selection(self.adaptation_sets, choose_lowest=True)
             else:
                 selections = self.abr_controller.update_selection(self.adaptation_sets)
+            self.log.info(f"Downloading index {self._index} at {selections}")
             self._current_selections = selections
             for listener in self.listeners:
                 await listener.on_segment_download_start(self._index, selections)
@@ -107,7 +108,7 @@ class BETASchedulerImpl(BETAScheduler):
                     self._end = True
                     return
                 urls.append(segment.url)
-                await self.download_manager.download(segment.url)
+                await self.download_manager.download(segment.url, rate=self.bandwidth_meter.bandwidth)
                 duration = segment.duration
             results = [await self.download_manager.wait_complete(url) for url in urls]
             if any([result is None for result in results]):

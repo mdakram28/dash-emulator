@@ -1,0 +1,20 @@
+diff -r 3550b00d9dc8 src/event/quic/ngx_event_quic_ack.c
+--- a/src/event/quic/ngx_event_quic_ack.c	Tue May 31 11:05:22 2022 +0400
++++ b/src/event/quic/ngx_event_quic_ack.c	Wed Aug 03 08:38:53 2022 -0600
+@@ -333,14 +333,14 @@
+     }
+ 
+     if (cg->window < cg->ssthresh) {
+-        cg->window += f->plen;
++        cg->window += f->plen / 2;
+ 
+         ngx_log_debug3(NGX_LOG_DEBUG_EVENT, c->log, 0,
+                        "quic congestion slow start win:%uz ss:%z if:%uz",
+                        cg->window, cg->ssthresh, cg->in_flight);
+ 
+     } else {
+-        cg->window += qc->tp.max_udp_payload_size * f->plen / cg->window;
++        cg->window += (qc->tp.max_udp_payload_size * f->plen / cg->window) / 2;
+ 
+         ngx_log_debug3(NGX_LOG_DEBUG_EVENT, c->log, 0,
+                        "quic congestion avoidance win:%uz ss:%z if:%uz",

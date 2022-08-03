@@ -9,10 +9,10 @@ requirements = [
     "requests",
     "matplotlib",
     "behave",
-    "aioquic",
+    "aioquic==0.9.11dev2",
     "matplotlib",
     "pyyaml",
-    "dash-emulator @ git+https://github.com/yang-jace-liu/dash-emulator#egg=dash-emulator"
+    "sslkeylog"
 ]
 
 setup(name='dash-emulator-quic',
