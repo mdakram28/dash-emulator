@@ -127,7 +127,7 @@ class DefaultMPDParser(MPDParser):
             num += 1
 
             if 'r' in segment.attrib:  # repeat
-                for i in range(1, int(segment.attrib.get('r'))):
+                for _ in range(int(segment.attrib.get('r'))):
                     url = base_url + re.sub(r"\$Number(%\d+d)\$", r"\1", media) % num
                     segments.append(Segment(url, duration))
                     num += 1

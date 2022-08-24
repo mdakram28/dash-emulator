@@ -19,6 +19,10 @@ class PlayerEventListener(ABC):
     async def on_buffer_level_change(self, buffer_level):
         pass
 
+    @abstractmethod
+    async def on_position_change(self, position):
+        pass
+
 
 class Player(ABC):
     @property
@@ -155,6 +159,7 @@ class DASHPlayer(Player):
         This method coordinate work between different components.
         """
         timestamp = 0
+        last_position_update = -1
         while True:
             now = time.time()
             interval = now - timestamp
@@ -165,6 +170,10 @@ class DASHPlayer(Player):
 
             if self._state == State.READY:
                 self._position += interval
+                if (now - last_position_update) > 1:
+                    for listener in self.listeners:
+                        await listener.on_position_change(self._position)
+                    last_position_update = now
 
             self.buffer_manager.update_buffer(self._position)
             buffer_level = self.buffer_manager.buffer_level

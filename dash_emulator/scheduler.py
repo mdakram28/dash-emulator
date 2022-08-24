@@ -1,6 +1,7 @@
 import asyncio
 from abc import abstractmethod, ABC
 from asyncio import Task
+import logging
 from typing import Optional, Dict, Set, List
 
 from dash_emulator.abr import ABRController
@@ -67,6 +68,8 @@ class Scheduler(ABC):
 
 
 class SchedulerImpl(Scheduler):
+    log = logging.getLogger("BETAManagerImpl")
+    
     def __init__(self,
                  max_buffer_duration: float,
                  update_interval: float,
@@ -122,6 +125,7 @@ class SchedulerImpl(Scheduler):
 
             # Download one segment from each adaptation set
             selections = self.abr_controller.update_selection(self.adaptation_sets)
+            self.log.info(f"selection: {selections} for index {self._index}")
             for listener in self.listeners:
                 await listener.on_segment_download_start(self._index, selections)
             duration = 0

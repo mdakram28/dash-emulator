@@ -30,7 +30,7 @@ def step_impl(context):
             print("Download Complete. Size: %10d" % size)
             self.on_download_complete_triggered = True
 
-        async def on_bytes_transferred(self, length: int, url: str, position: int, size: int) -> None:
+        async def on_bytes_transferred(self, length: int, url: str, position: int, size: int, content) -> None:
             print("%10d, %10d/%10d" % (length, position, size))
             self.on_bytes_downloaded_triggered = True
 

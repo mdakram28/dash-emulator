@@ -25,7 +25,7 @@ def build_dash_player() -> Player:
     mpd_provider: MPDProvider = MPDProviderImpl(DefaultMPDParser(), cfg.update_interval, DownloadManagerImpl([]))
     bandwidth_meter = BandwidthMeterImpl(cfg.max_initial_bitrate, cfg.smoothing_factor, [])
     download_manager = DownloadManagerImpl([bandwidth_meter])
-    abr_controller = DashABRController(2, 4, bandwidth_meter, buffer_manager)
+    abr_controller = DashABRController(2, 4, bandwidth_meter, buffer_manager, mpd_provider)
     scheduler: Scheduler = SchedulerImpl(5, cfg.update_interval, download_manager, bandwidth_meter, buffer_manager,
                                          abr_controller, [event_logger])
     return DASHPlayer(cfg.update_interval, min_rebuffer_duration=1, min_start_buffer_duration=2,

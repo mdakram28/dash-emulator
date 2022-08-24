@@ -1,9 +1,11 @@
 from abc import ABC, abstractmethod
+import logging
 from typing import Dict, Optional
 
 from dash_emulator.bandwidth import BandwidthMeter
 from dash_emulator.buffer import BufferManager
-from dash_emulator.models import AdaptationSet
+from dash_emulator.models import AdaptationSet, MPD
+from dash_emulator.mpd import MPDProvider
 
 
 class ABRController(ABC):
@@ -27,11 +29,14 @@ class ABRController(ABC):
 
 
 class DashABRController(ABRController):
+    log = logging.getLogger("DashABRController")
+    
     def __init__(self,
                  panic_buffer: float,
                  safe_buffer: float,
                  bandwidth_meter: BandwidthMeter,
-                 buffer_manager: BufferManager):
+                 buffer_manager: BufferManager,
+                 mpd_provider: MPDProvider):
         """
         Parameters
         ----------
@@ -48,6 +53,7 @@ class DashABRController(ABRController):
         self.safe_buffer = safe_buffer
         self.bandwidth_meter = bandwidth_meter
         self.buffer_manager = buffer_manager
+        self.mpd_provider = mpd_provider
 
         self._last_selections: Optional[Dict[int, int]] = None
 
@@ -106,6 +112,7 @@ class DashABRController(ABRController):
 
         buffer_level = self.buffer_manager.buffer_level
         final_selections = dict()
+        self.log.info(f"Ideal selection at {self.bandwidth_meter.bandwidth} is {ideal_selection}")
 
         # Take the buffer level into considerations
         if self._last_selections is not None:
@@ -113,10 +120,24 @@ class DashABRController(ABRController):
                 representations = adaptation_set.representations
                 last_repr = representations[self._last_selections.get(id_)]
                 ideal_repr = representations[ideal_selection.get(id_)]
+                self.log.info(f"buffer_level={buffer_level}, panic_buffer={self.panic_buffer}")
                 if buffer_level < self.panic_buffer:
                     final_repr_id = last_repr.id if last_repr.bandwidth < ideal_repr.bandwidth else ideal_repr.id
                 elif buffer_level > self.safe_buffer:
-                    final_repr_id = last_repr.id if last_repr.bandwidth > ideal_repr.bandwidth else ideal_repr.id
+                    if last_repr.bandwidth > ideal_repr.bandwidth:
+                        if adaptation_set.content_type == "video":
+                            bw_per_video = (available_bandwidth * 0.8) / num_videos
+                            next_segment_download_time = (last_repr.bandwidth+ideal_repr.bandwidth)*(self.mpd_provider.mpd.max_segment_duration/bw_per_video)
+                            self.log.info(f"bw_per_video={bw_per_video}, last_repr.bandwidth={last_repr.bandwidth}, next_segment_download_time={next_segment_download_time}, buffer_level={buffer_level}")
+                        else:
+                            bw_per_audio = (available_bandwidth * 0.2) / num_audios
+                            next_segment_download_time = (last_repr.bandwidth+ideal_repr.bandwidth)*(self.mpd_provider.mpd.max_segment_duration/bw_per_audio)
+                        if next_segment_download_time <= buffer_level:
+                            final_repr_id = last_repr.id
+                        else:
+                            final_repr_id = ideal_repr.id
+                    else:
+                        final_repr_id = ideal_repr.id
                 else:
                     final_repr_id = ideal_repr.id
                 final_selections[id_] = final_repr_id

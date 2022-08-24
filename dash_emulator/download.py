@@ -1,13 +1,17 @@
 import logging
 from abc import ABC, abstractmethod
+from enum import Enum
 from typing import List, Optional
 
 import aiohttp
 
+class DownloadType(Enum):
+    SEGMENT = 1
+    STREAM_INIT = 2
 
 class DownloadEventListener(ABC):
     @abstractmethod
-    async def on_bytes_transferred(self, length: int, url: str, position: int, size: int) -> None:
+    async def on_bytes_transferred(self, length: int, url: str, position: int, size: int, content: bytes) -> None:
         """
         Parameters
         ----------
@@ -19,6 +23,8 @@ class DownloadEventListener(ABC):
             The current position of the stream, in bytes
         size: int
             The size of the content: in bytes
+            :param content:
+
         """
         pass
 
@@ -68,7 +74,7 @@ class DownloadManager(ABC):
         pass
 
     @abstractmethod
-    async def download(self, url, save: bool = False) -> Optional[bytes]:
+    async def download(self, url, save: bool = False, rate: int = None) -> Optional[bytes]:
         """
         Start download
 
@@ -149,7 +155,7 @@ class DownloadManagerImpl(DownloadManager):
     def is_busy(self) -> bool:
         return self._busy
 
-    async def download(self, url, save=False) -> Optional[bytes]:
+    async def download(self, url: str, save=False, rate=None) -> Optional[bytes]:
         self._busy = True
         self._stop = False
         self.log.info("Start downloading %s" % url)
@@ -163,7 +169,7 @@ class DownloadManagerImpl(DownloadManager):
             for listener in self.event_listeners:
                 await listener.on_transfer_start(url)
             while not self._stop:
-                chunk = await resp.content.read(self.chunk_size)
+                chunk = await resp.content.readany()
                 if not chunk:
                     # Download complete, call listeners
                     for listener in self.event_listeners:
@@ -174,7 +180,7 @@ class DownloadManagerImpl(DownloadManager):
                     content.extend(chunk)
                 position += size
                 for listener in self.event_listeners:
-                    await listener.on_bytes_transferred(size, url, position, resp.content_length)
+                    await listener.on_bytes_transferred(size, url, position, resp.content_length, chunk)
             if self._stop:
                 for listener in self.event_listeners:
                     await listener.on_transfer_canceled(url, position, size)

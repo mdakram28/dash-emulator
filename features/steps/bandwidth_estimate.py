@@ -42,9 +42,9 @@ def step_impl(context):
     async def feed():
         await bandwidth_meter.on_transfer_start("http://foo.bar")
         await asyncio.sleep(0.1)
-        await bandwidth_meter.on_bytes_transferred(500, url, 500, 1000)
+        await bandwidth_meter.on_bytes_transferred(500, url, 500, 1000, None)
         await asyncio.sleep(0.1)
-        await bandwidth_meter.on_bytes_transferred(500, url, 1000, 1000)
+        await bandwidth_meter.on_bytes_transferred(500, url, 1000, 1000, None)
         await bandwidth_meter.on_transfer_end(1000, url)
 
     asyncio.run(feed())
@@ -106,16 +106,16 @@ def step_impl(context):
     async def feed():
         await bandwidth_meter.on_transfer_start("http://foo.bar")
         await asyncio.sleep(0.1)
-        await bandwidth_meter.on_bytes_transferred(500, url, 500, 1000)
+        await bandwidth_meter.on_bytes_transferred(500, url, 500, 1000, None)
         await asyncio.sleep(0.1)
-        await bandwidth_meter.on_bytes_transferred(500, url, 1000, 1000)
+        await bandwidth_meter.on_bytes_transferred(500, url, 1000, 1000, None)
         await bandwidth_meter.on_transfer_end(1000, url)
 
         await bandwidth_meter.on_transfer_start("http://foo.bar")
         await asyncio.sleep(0.05)
-        await bandwidth_meter.on_bytes_transferred(500, url, 500, 1000)
+        await bandwidth_meter.on_bytes_transferred(500, url, 500, 1000, None)
         await asyncio.sleep(0.05)
-        await bandwidth_meter.on_bytes_transferred(500, url, 1000, 1000)
+        await bandwidth_meter.on_bytes_transferred(500, url, 1000, 1000, None)
         await bandwidth_meter.on_transfer_end(1000, url)
 
     asyncio.run(feed())
