@@ -110,7 +110,9 @@ class BETASchedulerImpl(BETAScheduler):
                 urls.append(segment.url)
                 await self.download_manager.download(segment.url, rate=self.bandwidth_meter.bandwidth)
                 duration = segment.duration
+            self.log.info(f"Waiting for completion urls {urls}")
             results = [await self.download_manager.wait_complete(url) for url in urls]
+            self.log.info(f"Completed downloading from urls {urls}")
             if any([result is None for result in results]):
                 # Result is None means the stream got dropped
                 self._dropped_index = self._index

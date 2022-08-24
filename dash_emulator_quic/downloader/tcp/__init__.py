@@ -1,5 +1,6 @@
 import asyncio
 import logging
+import os
 import ssl
 from typing import Optional, Tuple, List, Dict, Set
 
@@ -12,7 +13,7 @@ from dash_emulator_quic.downloader.client import QuicClient
 class TCPClientImpl(QuicClient):
     log = logging.getLogger("TCPClientImpl")
 
-    def __init__(self, event_listeners: List[DownloadEventListener], *, ssl_keylog_file=""):
+    def __init__(self, event_listeners: List[DownloadEventListener]):
         self._event_listeners = event_listeners
         self._download_queue = asyncio.Queue()
         self._session = None
@@ -29,7 +30,7 @@ class TCPClientImpl(QuicClient):
         self._content = {}  # type: Dict[str, bytearray]
 
         self._waiting_urls = {}  # type: Dict[str, asyncio.Event]
-        self.ssl_keylog_file = ssl_keylog_file
+        self.ssl_keylog_file = os.getenv("SSLKEYLOGFILE")
 
     async def wait_complete(self, url: str) -> Optional[Tuple[bytes, int]]:
         # If url is in partially accepted set, return read bytes and length
@@ -87,7 +88,7 @@ class TCPClientImpl(QuicClient):
                 self.log.info(
                     f"Bytes transferred: length: {len(chunk)}, position: {len(self._content[url])}, size: {size}, url: {url}")
                 for listener in self._event_listeners:
-                    await listener.on_bytes_transferred(len(chunk), url, len(self._content[url]), size)
+                    await listener.on_bytes_transferred(len(chunk), url, len(self._content[url]), size, chunk)
         self.log.info(f"Transfer ends: {len(self._content[url])}")
         self._completed_urls.add(url)
         self._waiting_urls[url].set()

@@ -719,6 +719,8 @@ ngx_quic_create_stream(ngx_connection_t *c, uint64_t id)
     cln->data = sc;
 
     ngx_rbtree_insert(&qc->streams.tree, &qs->node);
+    ngx_log_debug1(NGX_LOG_DEBUG_EVENT, c->log, 0,
+                   "beta added stream:0x%xL", qs->id);
 
     return qs;
 }
@@ -1027,6 +1029,8 @@ ngx_quic_close_stream(ngx_quic_stream_t *qs)
     ngx_quic_free_buffer(pc, &qs->recv);
 
     ngx_rbtree_delete(&qc->streams.tree, &qs->node);
+    ngx_log_debug1(NGX_LOG_DEBUG_EVENT, pc->log, 0,
+                   "beta removed stream:0x%xL", qs->id);
     ngx_queue_insert_tail(&qc->streams.free, &qs->queue);
 
     if (qc->closing) {
@@ -1349,6 +1353,22 @@ ngx_quic_handle_reset_stream_frame(ngx_connection_t *c,
     return NGX_OK;
 }
 
+void print_all_stream_ids(
+    ngx_connection_t *c,
+    ngx_rbtree_node_t  *node, 
+    ngx_rbtree_node_t  *sentinel) {
+    
+    ngx_quic_stream_t  *qn;
+
+    if (node == sentinel) return;
+
+    qn = (ngx_quic_stream_t *) node;
+    ngx_log_debug1(NGX_LOG_DEBUG_EVENT, c->log, 0,
+                    "beta stream_id:0x%xL", qn->id);
+
+    print_all_stream_ids(c, node->left, sentinel);
+    print_all_stream_ids(c, node->right, sentinel);
+}
 
 ngx_int_t
 ngx_quic_handle_stop_sending_frame(ngx_connection_t *c,
@@ -1366,6 +1386,7 @@ ngx_quic_handle_stop_sending_frame(ngx_connection_t *c,
         return NGX_ERROR;
     }
 
+    print_all_stream_ids(c, qc->streams.tree.root, qc->streams.tree.sentinel);
     qs = ngx_quic_get_stream(c, f->id);
 
     if (qs == NULL) {

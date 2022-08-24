@@ -1,0 +1,10 @@
+wsproto
+uvloop
+aiohttp
+requests
+matplotlib
+behave
+aioquic==0.9.20
+matplotlib
+pyyaml
+sslkeylog

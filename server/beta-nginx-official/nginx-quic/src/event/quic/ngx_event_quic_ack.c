@@ -332,19 +332,27 @@ ngx_quic_congestion_ack(ngx_connection_t *c, ngx_quic_frame_t *f)
         goto done;
     }
 
-    if (cg->window < cg->ssthresh) {
-        cg->window += f->plen / 2;
+    if ( qc->latest_rtt < 500 ) {
+        if (cg->window < cg->ssthresh) {
+            cg->window += f->plen/2;
 
-        ngx_log_debug3(NGX_LOG_DEBUG_EVENT, c->log, 0,
-                       "quic congestion slow start win:%uz ss:%z if:%uz",
-                       cg->window, cg->ssthresh, cg->in_flight);
+            ngx_log_debug3(NGX_LOG_DEBUG_EVENT, c->log, 0,
+                        "quic congestion slow start win:%uz ss:%z if:%uz",
+                        cg->window, cg->ssthresh, cg->in_flight);
 
+        } else {
+            cg->window += (qc->tp.max_udp_payload_size * f->plen / cg->window)/2;
+
+            ngx_log_debug3(NGX_LOG_DEBUG_EVENT, c->log, 0,
+                        "quic congestion avoidance win:%uz ss:%z if:%uz",
+                        cg->window, cg->ssthresh, cg->in_flight);
+        }
     } else {
-        cg->window += (qc->tp.max_udp_payload_size * f->plen / cg->window) / 2;
+        // cg->window /= 4;
+    }
 
-        ngx_log_debug3(NGX_LOG_DEBUG_EVENT, c->log, 0,
-                       "quic congestion avoidance win:%uz ss:%z if:%uz",
-                       cg->window, cg->ssthresh, cg->in_flight);
+    if (cg->window > qc->tp.max_udp_payload_size * 10) {
+        cg->window = qc->tp.max_udp_payload_size * 10;
     }
 
     /* prevent recovery_start from wrapping */

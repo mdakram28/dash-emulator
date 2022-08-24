@@ -1,0 +1,3 @@
+[submodule "server/beta-aioquic/aioquic"]
+	path = server/beta-aioquic/aioquic
+	url = https://github.com/aiortc/aioquic.git

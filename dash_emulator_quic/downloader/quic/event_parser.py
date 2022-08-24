@@ -95,7 +95,7 @@ class H3EventParserImpl(H3EventParser):
         return bytes(content), size
 
     async def parse(self, url: str, event: H3Event):
-        self.log.debug(f"Event received for {url}")
+        self.log.info(f"Event {event.__class__.__name__} received for {url}")
         if isinstance(event, HeadersReceived):
             headers = self.parse_headers(event.headers)
             size = int(headers.get("content-length"))
@@ -111,7 +111,7 @@ class H3EventParserImpl(H3EventParser):
             position = len(self._contents[url])
 
             for listener in self.listeners:
-                await listener.on_bytes_transferred(len(event.data), url, position, size)
+                await listener.on_bytes_transferred(len(event.data), url, position, size, event.data)
 
             if url in self._partially_accepted_urls:
                 return

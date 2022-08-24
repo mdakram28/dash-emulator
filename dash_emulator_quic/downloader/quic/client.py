@@ -1,5 +1,6 @@
 import asyncio
 import logging
+import os
 import ssl
 from typing import List, Optional, Tuple, Set, AsyncIterator
 from urllib.parse import urlparse
@@ -26,9 +27,7 @@ class QuicClientImpl(QuicClient):
     def __init__(self,
                  event_listeners: List[DownloadEventListener],
                  event_parser: H3EventParser,
-                 session_ticket: Optional[SessionTicket] = None,
-                 ssl_keylog_file: str = None
-                 ):
+                 session_ticket: Optional[SessionTicket] = None):
         """
         Parameters
         ----------
@@ -41,11 +40,15 @@ class QuicClientImpl(QuicClient):
             With this ticket, The QUIC Client can have 0-RTT on the first request (if the server allows).
             The QUIC Client will use 0-RTT for the following requests no matter if this parameter is provided.
         """
+        if os.getenv('SSLKEYLOGFILE'):
+            ssl_keylog_file = open(os.getenv('SSLKEYLOGFILE'), 'a')
+        else:
+            ssl_keylog_file = None
         self.quic_configuration = QuicConfiguration(
             alpn_protocols=H3_ALPN, 
             is_client=True, 
             verify_mode=ssl.CERT_NONE,
-            secrets_log_file=open(ssl_keylog_file, 'a')
+            secrets_log_file=ssl_keylog_file
         )
         self.event_parser = event_parser
         if session_ticket is not None:
@@ -101,9 +104,6 @@ class QuicClientImpl(QuicClient):
     async def _download_internal(self, url: str, rate: int) -> AsyncIterator[Tuple[H3Event, str]]:
         self.log.info(f"Downloading Internal: {url}")
         headers = {}
-        # if rate is not None:
-            # headers["X-Accel-Limit-Rate"] = f"{int(rate*8)} bytes"
-            # headers["X-Accel-Buffering"] = f"no"
         print(headers)
         async for event in self._client.get(url, headers):
             yield event, url

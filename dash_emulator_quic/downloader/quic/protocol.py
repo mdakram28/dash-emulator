@@ -253,7 +253,8 @@ class HttpProtocol(QuicConnectionProtocol):
         stream_id = self._url_stream_id.get(url, None)
         assert stream_id is not None
         self.log.info(f"Send STOP_SENDING, stream id: {stream_id}, URL: {url}")
-        self._quic.send_stop_sending(stream_id, 0)
+        print(aioquic.__file__)
+        self._quic.stop_stream(stream_id, 0)
 
     def cancel_read(self, url):
         self.log.info(f"cancel_read: {url}")

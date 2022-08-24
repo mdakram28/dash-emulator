@@ -200,3 +200,5 @@ dmypy.json
 venv/
 
 dataset/
+
+server/*/certs

@@ -12,7 +12,7 @@
 #include <ngx_core.h>
 
 
-#define NGX_QUIC_MAX_UDP_PAYLOAD_SIZE        65527
+#define NGX_QUIC_MAX_UDP_PAYLOAD_SIZE        4094
 
 #define NGX_QUIC_DEFAULT_ACK_DELAY_EXPONENT  3
 #define NGX_QUIC_DEFAULT_MAX_ACK_DELAY       25
