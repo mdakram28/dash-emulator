@@ -1,3 +1,6 @@
 [submodule "server/beta-aioquic/aioquic"]
 	path = server/beta-aioquic/aioquic
 	url = https://github.com/aiortc/aioquic.git
+[submodule "dash-emulator"]
+	path = dash-emulator
+	url = https://github.com/Yang-Jace-Liu/dash-emulator.git
