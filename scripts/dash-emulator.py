@@ -10,6 +10,7 @@ import sys
 from os.path import join
 from typing import Dict, Union
 
+<<<<<<< HEAD
 import uvloop
 from exp_common.exp_recorder import ExpWriterJson
 
@@ -17,6 +18,9 @@ from dash_emulator_quic.config import load_config_env
 from dash_emulator_quic.log_handler import init_logging
 from dash_emulator_quic.network_manager import NetworkManager
 from dash_emulator_quic.player_factory import build_dash_player_over_quic
+=======
+from dash_emulator.player_factory import build_dash_player
+>>>>>>> temp
 
 log = logging.getLogger(__name__)
 
@@ -44,7 +48,11 @@ def create_parser():
 def validate_args(arguments: Dict[str, Union[int, str, None]]) -> bool:
     # Validate target
     # args.PLAYER_TARGET is required
+<<<<<<< HEAD
     if "target" not in arguments and arguments.get("config_file") is None:
+=======
+    if "target" not in arguments:
+>>>>>>> temp
         log.error("Argument \"%s\" is required" % PLAYER_TARGET)
         return False
     # HTTP or HTTPS protocol
@@ -58,8 +66,13 @@ def validate_args(arguments: Dict[str, Union[int, str, None]]) -> bool:
     # TODO
 
     # Validate Output
+<<<<<<< HEAD
     if arguments["plot"] is not None:
         path = pathlib.Path(arguments['plot'])
+=======
+    if arguments["output"] is not None:
+        path = pathlib.Path(arguments['output'])
+>>>>>>> temp
         path.mkdir(parents=True, exist_ok=True)
 
     return True
@@ -93,7 +106,13 @@ if __name__ == '__main__':
         log.error("Arguments validation error, exit.")
         exit(-1)
 
+<<<<<<< HEAD
     init_logging(run_id=args["run_id"])
+=======
+    logging.basicConfig(level=logging.INFO)
+
+    player = build_dash_player()
+>>>>>>> temp
 
     (player_config, downloader_config) = load_config_env(args['env'])
 
