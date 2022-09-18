@@ -139,7 +139,7 @@ class Representation(object):
 
 
 class Segment(object):
-    def __init__(self, url: str, duration: float):
+    def __init__(self, url: str, duration: float, extra: Dict = {}):
         self.url = url
         """
         The complete url of the segment
@@ -149,3 +149,4 @@ class Segment(object):
         """
         The duration of the segment in seconds
         """
+        self.extra = extra

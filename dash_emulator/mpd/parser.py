@@ -1,3 +1,4 @@
+from copy import deepcopy
 import logging
 import os
 import re
@@ -123,12 +124,12 @@ class DefaultMPDParser(MPDParser):
         for segment in segment_timeline:  # type: Element
             duration = float(segment.attrib.get("d")) / timescale
             url = base_url + re.sub(r"\$Number(%\d+d)\$", r"\1", media) % num
-            segments.append(Segment(url, duration))
+            segments.append(Segment(url, duration, segment.attrib))
             num += 1
 
             if 'r' in segment.attrib:  # repeat
                 for _ in range(int(segment.attrib.get('r'))):
                     url = base_url + re.sub(r"\$Number(%\d+d)\$", r"\1", media) % num
-                    segments.append(Segment(url, duration))
+                    segments.append(Segment(url, duration, deepcopy(segment.attrib)))
                     num += 1
         return Representation(int(id_), mime, codec, bandwidth, width, height, initialization, segments)

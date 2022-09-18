@@ -42,7 +42,7 @@ class EventLogger(SchedulerEventListener, PlayerEventListener):
         progress = position / self.total_duration
         self.recorder.write_event(ExpEvent_State(round(time.time() * 1000), progress, str(old_state), str(new_state)))
 
-    async def on_segment_download_start(self, index, selections):
+    async def on_segment_download_start(self, index, selections, **kwargs):
         self.log.info("Download start. Index: %d, Selections: %s" % (index, str(selections)))
 
     async def on_segment_download_complete(self, index):
