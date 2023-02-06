@@ -1,5 +1,6 @@
 import asyncio
 import time
+import logging
 from abc import ABC, abstractmethod
 from typing import Optional, List
 
@@ -66,6 +67,8 @@ class Player(ABC):
 
 
 class DASHPlayer(Player):
+    log = logging.getLogger("DASHPlayer")
+
     def __init__(self,
                  update_interval: float,
                  min_rebuffer_duration: float,

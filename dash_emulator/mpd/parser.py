@@ -7,7 +7,7 @@ from typing import Dict, List, Optional
 from xml.etree import ElementTree
 from xml.etree.ElementTree import Element
 
-from dash_emulator.models import MPD, AdaptationSet, Representation, Segment
+from dash_emulator.models.mpd_objects import MPD, AdaptationSet, Representation, Segment
 
 
 class MPDParsingException(Exception):
