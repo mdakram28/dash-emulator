@@ -101,7 +101,7 @@ class BandwidthMeterImpl(BandwidthMeter, DownloadEventListener):
         self.bytes_transferred += length
         t = time.time()
         await self.update_cont_bw(length, t)
-
+        
         # self.log.info(f"Transferred : {length} bytes")
         # if self.first_byte_at is None:
         #     self.first_byte_at = t
@@ -153,8 +153,8 @@ class BandwidthMeterImpl(BandwidthMeter, DownloadEventListener):
         self._bw = self._bw * self.smooth_factor + \
                    (8 * self.bytes_transferred) / (self.transmission_end_time - self.transmission_start_time) * \
                    (1 - self.smooth_factor)
-        if self.last_cont_bw is not None:
-            self._bw = (self._bw + self.last_cont_bw)/2
+        # if self.last_cont_bw is not None:
+        #     self._bw = (self._bw + self.last_cont_bw)/2
             # self._bw = self.last_cont_bw
         self.extra_stats = {
             "_bw": self._bw,

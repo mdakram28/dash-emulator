@@ -3,7 +3,7 @@ import logging
 import os
 import re
 from abc import ABC, abstractmethod
-from typing import Dict, List
+from typing import Dict, List, Optional
 from xml.etree import ElementTree
 from xml.etree.ElementTree import Element
 
@@ -72,16 +72,16 @@ class DefaultMPDParser(MPDParser):
 
         base_url = os.path.dirname(url) + '/'
 
-        for adaptation_set_xml in period:
-            adaptation_set: AdaptationSet = self.parse_adaptation_set(adaptation_set_xml, base_url)
+        for index, adaptation_set_xml in enumerate(period):
+            adaptation_set: AdaptationSet = self.parse_adaptation_set(adaptation_set_xml, base_url, index)
             adaptation_sets[adaptation_set.id] = adaptation_set
 
         return MPD(content, url, type_, media_presentation_duration, max_segment_duration, min_buffer_time,
                    adaptation_sets)
 
-    def parse_adaptation_set(self, tree: Element, base_url) -> AdaptationSet:
-        id_ = tree.attrib.get("id")
-        content_type = tree.attrib.get("contentType")
+    def parse_adaptation_set(self, tree: Element, base_url, index: Optional[int]) -> AdaptationSet:
+        id_ = tree.attrib.get("id", str(index))
+        content_type = tree.attrib.get("contentType", "video")
         frame_rate = tree.attrib.get("frameRate", None)
         max_width = int(tree.attrib.get("maxWidth") if tree.attrib.get("maxWidth") is not None else 0)
         max_height = int(tree.attrib.get("maxHeight") if tree.attrib.get("maxHeight") is not None else 0)

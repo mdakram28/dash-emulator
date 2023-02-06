@@ -15,7 +15,7 @@ class Config(object):
     bandwidth_fraction = 0.75
 
     # averageSpeed = SMOOTHING_FACTOR * lastSpeed + (1-SMOOTHING_FACTOR) * averageSpeed;
-    smoothing_factor = 0
+    smoothing_factor = 0.5
 
     # minimum frame chunk size ratio
     # The size ratio of a segment which is for I-, P-, and B-frames.
