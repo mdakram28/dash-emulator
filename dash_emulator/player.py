@@ -167,6 +167,7 @@ class DASHPlayer(Player):
 
             # Update MPD object
             self._mpd_obj = self.mpd_provider.mpd
+            self.scheduler.update(adaptation_sets=self._mpd_obj.adaptation_sets)
 
             if self._state == State.READY:
                 self._position += interval

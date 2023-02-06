@@ -112,7 +112,7 @@ class DefaultMPDParser(MPDParser):
         segment_template: Element = tree.find("SegmentTemplate")
         initialization = segment_template.attrib.get("initialization").replace("$RepresentationID$", id_)
         initialization = base_url + initialization
-        segments: List[Segment] = []
+        segments: Dict[int, Segment] = {}
 
         timescale = int(segment_template.attrib.get("timescale"))
         media = segment_template.attrib.get("media").replace("$RepresentationID$", id_)
@@ -124,12 +124,12 @@ class DefaultMPDParser(MPDParser):
         for segment in segment_timeline:  # type: Element
             duration = float(segment.attrib.get("d")) / timescale
             url = base_url + re.sub(r"\$Number(%\d+d)\$", r"\1", media) % num
-            segments.append(Segment(url, duration, segment.attrib))
+            segments[num] = Segment(url, duration, segment.attrib)
             num += 1
 
             if 'r' in segment.attrib:  # repeat
                 for _ in range(int(segment.attrib.get('r'))):
                     url = base_url + re.sub(r"\$Number(%\d+d)\$", r"\1", media) % num
-                    segments.append(Segment(url, duration, deepcopy(segment.attrib)))
+                    segments[num] = Segment(url, duration, deepcopy(segment.attrib))
                     num += 1
         return Representation(int(id_), mime, codec, bandwidth, width, height, initialization, segments)

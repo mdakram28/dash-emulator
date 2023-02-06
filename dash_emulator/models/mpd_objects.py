@@ -96,7 +96,7 @@ class AdaptationSet(object):
 class Representation(object):
     def __init__(self, id_: int, mime_type: str,
                  codecs: str, bandwidth: int, width: int, height: int,
-                 initialization: str, segments: List['Segment']):
+                 initialization: str, segments: Dict[int, 'Segment']):
         self.id = id_
         """
         The id of the representation
@@ -132,7 +132,7 @@ class Representation(object):
         The initialization URL
         """
 
-        self.segments: List[Segment] = segments
+        self.segments: Dict[int, Segment] = segments
         """
         The video segments
         """
